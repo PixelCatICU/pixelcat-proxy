@@ -1,0 +1,25 @@
+services:
+  naiveproxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: naiveproxy-caddy
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DOMAIN: ${DOMAIN}
+      USERNAME: ${USERNAME}
+      PASSWORD: ${PASSWORD}
+      DECOY_DOMAIN: ${DECOY_DOMAIN}
+      EMAIL: ${EMAIL:-}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

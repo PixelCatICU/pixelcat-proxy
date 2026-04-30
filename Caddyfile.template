@@ -1,0 +1,23 @@
+{
+	admin off
+	email ${EMAIL}
+}
+
+${DOMAIN} {
+	tls {
+		protocols tls1.2 tls1.3
+	}
+
+	forward_proxy {
+		basic_auth ${USERNAME} ${PASSWORD}
+		hide_ip
+		hide_via
+		probe_resistance
+	}
+
+	reverse_proxy https://${DECOY_DOMAIN} {
+		header_up Host ${DECOY_DOMAIN}
+		header_up X-Forwarded-Host ${DOMAIN}
+		header_up X-Forwarded-Proto https
+	}
+}
