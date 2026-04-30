@@ -19,7 +19,7 @@
 
 # 🚀 NaiveProxy Docker 部署
 
-这个项目提供一个 Docker Compose 部署：容器内自动构建带 NaiveProxy 支持的 Caddy，启动后由 Caddy 自动申请和续期 HTTPS 证书。🔒
+这个项目提供一个 Docker Compose 部署：默认从 GitHub Container Registry 拉取已构建镜像，容器内运行带 NaiveProxy 支持的 Caddy，启动后由 Caddy 自动申请和续期 HTTPS 证书。🔒
 
 ## ✅ 前置条件
 
@@ -27,7 +27,7 @@
 - 🛡️ 服务器防火墙和云厂商安全组放行 `80/tcp` 和 `443/tcp`。
 - 🐳 Docker 和 Docker Compose 已安装。
 
-## 🛠️ 使用
+## 🛠️ 使用已发布镜像部署
 
 ```bash
 # 进入当前项目目录
@@ -47,7 +47,7 @@ EMAIL=admin@example.com
 🚀 启动：
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
 📜 查看日志：
@@ -67,6 +67,61 @@ docker compose down
 ```bash
 docker compose down -v
 ```
+
+## 🐳 Dockge 部署
+
+Dockge 里推荐使用这个项目的 `docker-compose.yml`，它会直接拉取：
+
+```text
+ghcr.io/pixelcaticu/pixelcat-naiveproxy:latest
+```
+
+服务器准备：
+
+```bash
+cd /opt/stacks
+git clone git@github.com:PixelCatICU/pixelcat-naiveproxy.git
+cd pixelcat-naiveproxy
+cp .env.example .env
+```
+
+编辑 `.env` 后，在 Dockge 里启动 `pixelcat-naiveproxy` Stack。
+
+更新镜像：
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+也可以在 Dockge 面板里点更新镜像后重启 Stack。
+
+## 🏗️ 本地构建部署
+
+如果不想使用 GHCR 镜像，可以在服务器本地构建：
+
+```bash
+docker compose -f docker-compose.build.yml up -d --build
+```
+
+本地构建模式会使用当前目录的 [Dockerfile](./Dockerfile) 构建镜像。
+
+## 📦 镜像发布
+
+推送到 `main` 分支后，GitHub Actions 会自动构建并发布多架构镜像：
+
+```text
+ghcr.io/pixelcaticu/pixelcat-naiveproxy:latest
+```
+
+打版本标签也会发布对应版本镜像：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+发布后如果 GHCR Package 默认是私有，需要在 GitHub 仓库的 Packages 设置里改成 Public，服务器才能免登录拉取镜像。
 
 ## 📱 NaiveProxy 客户端配置
 

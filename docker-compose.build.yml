@@ -1,6 +1,9 @@
 services:
   naiveproxy:
-    image: ghcr.io/pixelcaticu/pixelcat-naiveproxy:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pixelcat-naiveproxy:local
     container_name: naiveproxy-caddy
     restart: unless-stopped
     env_file:
