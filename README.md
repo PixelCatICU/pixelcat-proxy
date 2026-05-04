@@ -75,6 +75,12 @@ docker compose down -v
 在服务器执行：
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/PixelCatICU/pixelcat-naiveproxy/main/install.sh | bash
+```
+
+这个入口脚本会自动执行：
+
+```bash
 mkdir -p /opt/pixelcat
 cd /opt/pixelcat
 git clone https://github.com/PixelCatICU/pixelcat-naiveproxy.git
@@ -82,6 +88,8 @@ cd pixelcat-naiveproxy
 chmod +x deploy.sh
 ./deploy.sh
 ```
+
+如果项目已经存在，它会自动进入 `/opt/pixelcat/pixelcat-naiveproxy` 拉取最新代码，然后启动 `deploy.sh` 菜单。
 
 脚本会显示菜单：
 
