@@ -27,47 +27,6 @@
 - 🛡️ 服务器防火墙和云厂商安全组放行 `80/tcp` 和 `443/tcp`。
 - 🐳 Docker 和 Docker Compose 已安装。
 
-## 🛠️ 使用已发布镜像部署
-
-```bash
-# 进入当前项目目录
-cp .env.example .env
-```
-
-📝 编辑 `.env`：
-
-```env
-DOMAIN=proxy.example.com
-USERNAME=your_user
-PASSWORD=change_this_strong_password
-DECOY_DOMAIN=www.example.com
-EMAIL=admin@example.com
-```
-
-🚀 启动：
-
-```bash
-docker compose up -d
-```
-
-📜 查看日志：
-
-```bash
-docker compose logs -f
-```
-
-🛑 停止：
-
-```bash
-docker compose down
-```
-
-🧹 如果要连证书数据一起删除：
-
-```bash
-docker compose down -v
-```
-
 ## ⚡ 一键部署脚本
 
 ### 方式一：交互式部署
@@ -109,7 +68,7 @@ chmod +x deploy.sh
 - `DECOY_DOMAIN`：伪装网站域名，例如 `www.example.com`
 - `EMAIL`：证书邮箱，可选
 
-脚本会自动生成 `.env`，拉取 GHCR 镜像并启动服务。
+脚本会自动生成 `.env`，优先拉取 GHCR 镜像并启动服务；如果检测到 GHCR 镜像落后于当前项目代码，会自动切换为本地 Docker 构建后启动。
 
 如果服务器没有 Docker，脚本会提示自动安装 Docker Engine 和 Docker Compose 插件。
 
@@ -176,6 +135,47 @@ docker compose logs -f
 
 ```bash
 ./deploy.sh --uninstall -y
+```
+
+## 🛠️ 使用已发布镜像部署
+
+```bash
+# 进入当前项目目录
+cp .env.example .env
+```
+
+📝 编辑 `.env`：
+
+```env
+DOMAIN=proxy.example.com
+USERNAME=your_user
+PASSWORD=change_this_strong_password
+DECOY_DOMAIN=www.example.com
+EMAIL=admin@example.com
+```
+
+🚀 启动：
+
+```bash
+docker compose up -d
+```
+
+📜 查看日志：
+
+```bash
+docker compose logs -f
+```
+
+🛑 停止：
+
+```bash
+docker compose down
+```
+
+🧹 如果要连证书数据一起删除：
+
+```bash
+docker compose down -v
 ```
 
 ## 🐳 Dockge 部署
