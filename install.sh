@@ -53,4 +53,9 @@ fi
 
 cd "$APP_DIR"
 chmod +x deploy.sh
+
+if [ -r /dev/tty ]; then
+  exec ./deploy.sh "$@" < /dev/tty
+fi
+
 exec ./deploy.sh "$@"
