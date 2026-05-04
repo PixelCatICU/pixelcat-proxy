@@ -68,6 +68,34 @@ docker compose down
 docker compose down -v
 ```
 
+## ⚡ 一键部署脚本
+
+也可以直接运行交互式部署脚本，按提示输入域名、用户名、密码和伪装网站：
+
+```bash
+chmod +x deploy.sh
+./deploy.sh
+```
+
+脚本会自动生成 `.env`，拉取 GHCR 镜像并启动服务。
+
+也可以一次性传入参数：
+
+```bash
+./deploy.sh \
+  --domain proxy.example.com \
+  --username your_user \
+  --password change_this_strong_password \
+  --decoy-domain www.example.com \
+  --email admin@example.com
+```
+
+只生成 `.env`，不启动容器：
+
+```bash
+./deploy.sh --skip-start
+```
+
 ## 🐳 Dockge 部署
 
 Dockge 里推荐使用这个项目的 `docker-compose.yml`，它会直接拉取：
