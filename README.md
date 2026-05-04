@@ -12,7 +12,7 @@
 
 ## 📺 频道入口
 
-- 🏠 [官网](https://pixelcat.icu/about/)
+- 🏠 [官网](https://pixelcat.icu)
 - ▶️ [YouTube 订阅](https://www.youtube.com/@PixelCatICU)
 - 💻 [GitHub 地址](https://github.com/PixelCatICU)
 - 🐦 [X](https://x.com/PixelCatICU)
