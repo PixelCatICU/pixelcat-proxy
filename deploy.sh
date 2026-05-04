@@ -15,6 +15,7 @@ PASSWORD_FROM_ARG="false"
 DOCKER_CMD="docker"
 ACTION="menu"
 PURGE="false"
+IMAGE_REF="ghcr.io/pixelcaticu/pixelcat-naiveproxy:latest"
 
 usage() {
   cat <<'USAGE'
@@ -422,6 +423,51 @@ uninstall_stack() {
   echo "卸载完成。"
 }
 
+current_git_revision() {
+  git rev-parse HEAD 2>/dev/null || true
+}
+
+image_revision() {
+  $DOCKER_CMD image inspect "$IMAGE_REF" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' 2>/dev/null || true
+}
+
+start_stack() {
+  local current_revision
+  local pulled_revision
+
+  current_revision="$(current_git_revision)"
+
+  echo
+  echo "Pulling image and starting service..."
+  $DOCKER_CMD compose pull
+
+  pulled_revision="$(image_revision)"
+  if [ -n "$current_revision" ] && [ -n "$pulled_revision" ]; then
+    case "$pulled_revision" in
+      "$current_revision"*)
+        $DOCKER_CMD compose up -d
+        return
+        ;;
+    esac
+
+    echo
+    echo "GHCR image is not up to date with this project checkout."
+    echo "Image revision: ${pulled_revision}"
+    echo "Project revision: ${current_revision}"
+    echo "Falling back to local Docker build..."
+
+    if [ ! -f docker-compose.build.yml ]; then
+      echo "docker-compose.build.yml not found; cannot build locally." >&2
+      exit 1
+    fi
+
+    $DOCKER_CMD compose -f docker-compose.build.yml up -d --build
+    return
+  fi
+
+  $DOCKER_CMD compose up -d
+}
+
 show_menu() {
   local choice
 
@@ -573,9 +619,7 @@ install_docker
 configure_docker_command
 
 echo
-echo "Pulling image and starting service..."
-$DOCKER_CMD compose pull
-$DOCKER_CMD compose up -d
+start_stack
 
 echo
 echo "Deployment finished."
