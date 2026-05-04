@@ -430,6 +430,14 @@ show_menu() {
 
 PixelCat NaiveProxy 一键脚本
 
+像素猫 - 科学上网ICU
+中文教程博客，整理科学上网、网络诊断、节点维护与隐私安全的实用经验。
+
+官网: https://pixelcat.icu/about/
+YouTube: https://www.youtube.com/@PixelCatICU
+GitHub: https://github.com/PixelCatICU
+X: https://x.com/PixelCatICU
+
 1) 安装 / 更新
 2) 卸载
 0) 退出
