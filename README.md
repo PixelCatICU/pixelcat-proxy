@@ -79,6 +79,8 @@ chmod +x deploy.sh
 
 脚本会自动生成 `.env`，拉取 GHCR 镜像并启动服务。
 
+如果服务器没有 Docker，脚本会提示自动安装 Docker Engine 和 Docker Compose 插件。
+
 也可以一次性传入参数：
 
 ```bash
@@ -94,6 +96,12 @@ chmod +x deploy.sh
 
 ```bash
 ./deploy.sh --skip-start
+```
+
+不希望脚本自动安装 Docker：
+
+```bash
+./deploy.sh --no-install-docker
 ```
 
 ## 🐳 Dockge 部署
