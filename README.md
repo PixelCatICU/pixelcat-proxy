@@ -94,9 +94,9 @@ chmod +x deploy.sh
 脚本会显示菜单：
 
 ```text
-1) Install / Update
-2) Uninstall
-0) Exit
+1) 安装 / 更新
+2) 卸载
+0) 退出
 ```
 
 输入 `1` 后，按提示填写部署参数。

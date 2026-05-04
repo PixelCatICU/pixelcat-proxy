@@ -392,9 +392,9 @@ uninstall_stack() {
 
   if [ "$ASSUME_YES" != "true" ]; then
     if [ "$PURGE" = "true" ]; then
-      read -r -p "Uninstall NaiveProxy and delete certificate volumes plus .env? [y/N]: " uninstall_confirm
+      read -r -p "确认卸载 NaiveProxy，并删除证书数据卷和 .env？[y/N]: " uninstall_confirm
     else
-      read -r -p "Uninstall NaiveProxy containers? Certificate volumes will be kept. [y/N]: " uninstall_confirm
+      read -r -p "确认卸载 NaiveProxy 容器？证书数据卷会保留。[y/N]: " uninstall_confirm
     fi
     case "$uninstall_confirm" in
       y|Y|yes|YES)
@@ -408,18 +408,18 @@ uninstall_stack() {
 
   echo
   if [ "$PURGE" = "true" ]; then
-    echo "Stopping containers and removing volumes..."
+    echo "正在停止容器并删除数据卷..."
     $DOCKER_CMD compose down -v --remove-orphans
     if [ -f ".env" ]; then
       rm -f .env
-      echo "Removed .env."
+      echo "已删除 .env。"
     fi
   else
-    echo "Stopping containers..."
+    echo "正在停止容器..."
     $DOCKER_CMD compose down --remove-orphans
   fi
 
-  echo "Uninstall finished."
+  echo "卸载完成。"
 }
 
 show_menu() {
@@ -428,14 +428,14 @@ show_menu() {
   while true; do
     cat <<'MENU'
 
-PixelCat NaiveProxy
+PixelCat NaiveProxy 一键脚本
 
-1) Install / Update
-2) Uninstall
-0) Exit
+1) 安装 / 更新
+2) 卸载
+0) 退出
 
 MENU
-    read -r -p "Select an option [1/2/0]: " choice
+    read -r -p "请输入选项 [1/2/0]: " choice
     case "$choice" in
       1)
         ACTION="install"
@@ -444,7 +444,7 @@ MENU
       2)
         ACTION="uninstall"
         if [ "$ASSUME_YES" != "true" ]; then
-          read -r -p "Also remove certificate volumes and .env? [y/N]: " purge_confirm
+          read -r -p "是否同时删除证书数据卷和 .env？[y/N]: " purge_confirm
           case "$purge_confirm" in
             y|Y|yes|YES)
               PURGE="true"
@@ -454,11 +454,11 @@ MENU
         return
         ;;
       0)
-        echo "Bye."
+        echo "已退出。"
         exit 0
         ;;
       *)
-        echo "Invalid option."
+        echo "无效选项。"
         ;;
     esac
   done
