@@ -70,12 +70,26 @@ docker compose down -v
 
 ## ⚡ 一键部署脚本
 
-也可以直接运行交互式部署脚本，按提示输入域名、用户名、密码和伪装网站：
+### 方式一：交互式部署
+
+在服务器执行：
 
 ```bash
+mkdir -p /opt/pixelcat
+cd /opt/pixelcat
+git clone https://github.com/PixelCatICU/pixelcat-naiveproxy.git
+cd pixelcat-naiveproxy
 chmod +x deploy.sh
 ./deploy.sh
 ```
+
+然后按提示输入：
+
+- `DOMAIN`：代理域名，例如 `proxy.example.com`
+- `USERNAME`：NaiveProxy 用户名
+- `PASSWORD`：NaiveProxy 密码
+- `DECOY_DOMAIN`：伪装网站域名，例如 `www.example.com`
+- `EMAIL`：证书邮箱，可选
 
 脚本会自动生成 `.env`，拉取 GHCR 镜像并启动服务。
 
@@ -83,10 +97,12 @@ chmod +x deploy.sh
 
 Docker 自动安装优先支持 Ubuntu、Debian、CentOS、RHEL、Rocky Linux、AlmaLinux、Fedora 和 Alpine。部分云厂商定制系统可能需要先手动安装 Docker。
 
+### 方式二：带参数部署
+
 也可以一次性传入参数：
 
 ```bash
-./deploy.sh \
+./deploy.sh -y \
   --domain proxy.example.com \
   --username your_user \
   --password change_this_strong_password \
@@ -96,16 +112,32 @@ Docker 自动安装优先支持 Ubuntu、Debian、CentOS、RHEL、Rocky Linux、
 
 生产环境更推荐交互式输入密码，因为 `--password` 参数可能被 shell 历史或进程列表记录。
 
+### 方式三：只生成配置
+
 只生成 `.env`，不启动容器：
 
 ```bash
 ./deploy.sh --skip-start
 ```
 
+### 常用选项
+
 不希望脚本自动安装 Docker：
 
 ```bash
 ./deploy.sh --no-install-docker
+```
+
+查看脚本帮助：
+
+```bash
+./deploy.sh --help
+```
+
+部署完成后查看日志：
+
+```bash
+docker compose logs -f
 ```
 
 ## 🐳 Dockge 部署
