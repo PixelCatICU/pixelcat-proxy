@@ -81,6 +81,8 @@ chmod +x deploy.sh
 
 如果服务器没有 Docker，脚本会提示自动安装 Docker Engine 和 Docker Compose 插件。
 
+Docker 自动安装优先支持 Ubuntu、Debian、CentOS、RHEL、Rocky Linux、AlmaLinux、Fedora 和 Alpine。部分云厂商定制系统可能需要先手动安装 Docker。
+
 也可以一次性传入参数：
 
 ```bash
@@ -91,6 +93,8 @@ chmod +x deploy.sh
   --decoy-domain www.example.com \
   --email admin@example.com
 ```
+
+生产环境更推荐交互式输入密码，因为 `--password` 参数可能被 shell 历史或进程列表记录。
 
 只生成 `.env`，不启动容器：
 
