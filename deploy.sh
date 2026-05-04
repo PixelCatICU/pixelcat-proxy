@@ -13,16 +13,23 @@ SKIP_START="false"
 INSTALL_DOCKER="auto"
 PASSWORD_FROM_ARG="false"
 DOCKER_CMD="docker"
+ACTION="menu"
+PURGE="false"
 
 usage() {
   cat <<'USAGE'
 PixelCat NaiveProxy one-click deploy script
 
 Usage:
-  ./deploy.sh
+  ./deploy.sh                 Show interactive menu
+  ./deploy.sh --install
+  ./deploy.sh --uninstall
   ./deploy.sh --domain proxy.example.com --username user --password pass --decoy-domain www.example.com --email admin@example.com
 
 Options:
+      --install         Install or update NaiveProxy, default action
+      --uninstall       Stop and remove NaiveProxy containers
+      --purge           With --uninstall, also remove volumes and .env
   -d, --domain          Proxy domain, required
   -u, --username        NaiveProxy username, required
   -p, --password        NaiveProxy password, required
@@ -49,6 +56,18 @@ require_option_value() {
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --install)
+      ACTION="install"
+      shift
+      ;;
+    --uninstall)
+      ACTION="uninstall"
+      shift
+      ;;
+    --purge)
+      PURGE="true"
+      shift
+      ;;
     -d|--domain)
       require_option_value "$1" "${2:-}"
       DOMAIN="${2:-}"
@@ -108,6 +127,17 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+
+if [ "$PURGE" = "true" ] && [ "$ACTION" != "uninstall" ]; then
+  echo "--purge can only be used with --uninstall." >&2
+  exit 1
+fi
+
+if [ "$ACTION" = "menu" ]; then
+  if [ -n "$DOMAIN" ] || [ -n "$USERNAME" ] || [ -n "$PASSWORD" ] || [ -n "$DECOY_DOMAIN" ] || [ -n "$EMAIL" ] || [ "$SKIP_START" = "true" ] || [ "$INSTALL_DOCKER" = "false" ]; then
+    ACTION="install"
+  fi
+fi
 
 prompt_value() {
   local var_name="$1"
@@ -351,6 +381,97 @@ configure_docker_command() {
   echo "Try rerunning this script as root, or add your user to the docker group and log in again." >&2
   exit 1
 }
+
+uninstall_stack() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "Docker is not installed. Nothing to uninstall."
+    exit 0
+  fi
+
+  configure_docker_command
+
+  if [ "$ASSUME_YES" != "true" ]; then
+    if [ "$PURGE" = "true" ]; then
+      read -r -p "Uninstall NaiveProxy and delete certificate volumes plus .env? [y/N]: " uninstall_confirm
+    else
+      read -r -p "Uninstall NaiveProxy containers? Certificate volumes will be kept. [y/N]: " uninstall_confirm
+    fi
+    case "$uninstall_confirm" in
+      y|Y|yes|YES)
+        ;;
+      *)
+        echo "Canceled."
+        exit 0
+        ;;
+    esac
+  fi
+
+  echo
+  if [ "$PURGE" = "true" ]; then
+    echo "Stopping containers and removing volumes..."
+    $DOCKER_CMD compose down -v --remove-orphans
+    if [ -f ".env" ]; then
+      rm -f .env
+      echo "Removed .env."
+    fi
+  else
+    echo "Stopping containers..."
+    $DOCKER_CMD compose down --remove-orphans
+  fi
+
+  echo "Uninstall finished."
+}
+
+show_menu() {
+  local choice
+
+  while true; do
+    cat <<'MENU'
+
+PixelCat NaiveProxy
+
+1) Install / Update
+2) Uninstall
+0) Exit
+
+MENU
+    read -r -p "Select an option [1/2/0]: " choice
+    case "$choice" in
+      1)
+        ACTION="install"
+        return
+        ;;
+      2)
+        ACTION="uninstall"
+        if [ "$ASSUME_YES" != "true" ]; then
+          read -r -p "Also remove certificate volumes and .env? [y/N]: " purge_confirm
+          case "$purge_confirm" in
+            y|Y|yes|YES)
+              PURGE="true"
+              ;;
+          esac
+        fi
+        return
+        ;;
+      0)
+        echo "Bye."
+        exit 0
+        ;;
+      *)
+        echo "Invalid option."
+        ;;
+    esac
+  done
+}
+
+if [ "$ACTION" = "menu" ]; then
+  show_menu
+fi
+
+if [ "$ACTION" = "uninstall" ]; then
+  uninstall_stack
+  exit 0
+fi
 
 DOMAIN="$(strip_scheme "$(prompt_value DOMAIN "Proxy domain, for example proxy.example.com" "$DOMAIN")")"
 USERNAME="$(prompt_value USERNAME "NaiveProxy username" "$USERNAME")"

@@ -83,6 +83,16 @@ chmod +x deploy.sh
 ./deploy.sh
 ```
 
+脚本会显示菜单：
+
+```text
+1) Install / Update
+2) Uninstall
+0) Exit
+```
+
+输入 `1` 后，按提示填写部署参数。
+
 然后按提示输入：
 
 - `DOMAIN`：代理域名，例如 `proxy.example.com`
@@ -138,6 +148,26 @@ Docker 自动安装优先支持 Ubuntu、Debian、CentOS、RHEL、Rocky Linux、
 
 ```bash
 docker compose logs -f
+```
+
+### 卸载服务
+
+停止并删除 NaiveProxy 容器，保留证书和 Caddy 数据卷：
+
+```bash
+./deploy.sh --uninstall
+```
+
+完全卸载，连证书数据卷和 `.env` 一起删除：
+
+```bash
+./deploy.sh --uninstall --purge
+```
+
+免确认卸载：
+
+```bash
+./deploy.sh --uninstall -y
 ```
 
 ## 🐳 Dockge 部署
