@@ -408,18 +408,6 @@ build_caddy() {
   rm -f "$tmp_bin"
 }
 
-stop_legacy_docker_stack() {
-  if ! command -v docker >/dev/null 2>&1; then
-    return
-  fi
-
-  if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx 'naiveproxy-caddy'; then
-    echo
-    echo "检测到旧 Docker 容器 naiveproxy-caddy，正在停止以释放端口..."
-    docker rm -f naiveproxy-caddy >/dev/null 2>&1 || true
-  fi
-}
-
 write_caddyfile() {
   local caddy_user caddy_pass
   caddy_user="$(caddy_escape "$USERNAME")"
@@ -548,7 +536,6 @@ EOF
 install_stack() {
   need_linux
   need_systemd
-  stop_legacy_docker_stack
   install_base_packages
   select_or_install_go
   install_xcaddy

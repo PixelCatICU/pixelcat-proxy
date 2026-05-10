@@ -1,8 +1,0 @@
-.git
-.github
-.DS_Store
-.env
-caddy_data
-caddy_config
-README.md
-docker-compose*.yml

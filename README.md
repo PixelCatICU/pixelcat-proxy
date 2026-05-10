@@ -19,11 +19,11 @@
 
 # 🚀 NaiveProxy 直装部署
 
-这个项目提供 NaiveProxy 一键部署脚本：不依赖 Docker，直接在服务器上编译带 `forwardproxy` 插件的 Caddy，并通过 `systemd` 运行 NaiveProxy。Caddy 会自动申请和续期 HTTPS 证书。🔒
+这个项目提供 NaiveProxy 一键部署脚本：直接在服务器上编译带 `forwardproxy` 插件的 Caddy，并通过 `systemd` 运行 NaiveProxy。Caddy 会自动申请和续期 HTTPS 证书。🔒
 
 ## ✨ 功能
 
-- ⚡ 不用 Docker，直接安装到宿主机
+- ⚡ 直接安装到宿主机
 - 🔐 自动申请和续期 Let's Encrypt 证书
 - 🎭 支持反代伪装网站域名
 - 📱 部署完成后自动打印 sing-box 客户端配置
@@ -256,39 +256,3 @@ https://your_user:change_this_strong_password@proxy.example.com
 - 🎭 `DECOY_DOMAIN` 只填写域名，不要带 `https://`，例如 `www.example.com`。
 - 💾 `/var/lib/pixelcat-naiveproxy` 保存证书和 ACME 账号信息，不要随意删除。
 - ☁️ 如果域名套了 CDN，需要确认 CDN 支持 NaiveProxy 所需的 HTTPS 代理流量，否则建议 DNS 记录先仅 DNS 解析，不启用代理。
-
-## 🐳 Docker 镜像部署（可选）
-
-这个项目仍保留 Dockerfile 和 compose 文件，适合需要容器化的用户。当前推荐方式是上面的直装脚本。
-
-```bash
-cp .env.example .env
-docker compose up -d
-```
-
-查看日志：
-
-```bash
-docker compose logs -f
-```
-
-停止：
-
-```bash
-docker compose down
-```
-
-## 📦 镜像发布（可选）
-
-推送到 `main` 分支后，GitHub Actions 会自动构建并发布多架构镜像：
-
-```text
-ghcr.io/pixelcaticu/pixelcat-naiveproxy:latest
-```
-
-打版本标签也会发布对应版本镜像：
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
