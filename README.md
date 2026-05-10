@@ -248,7 +248,7 @@ https://your_user:change_this_strong_password@proxy.example.com
 | `DOMAIN` | 是 | 用于申请证书和访问代理的域名 |
 | `USERNAME` | 是 | NaiveProxy Basic Auth 用户名 |
 | `PASSWORD` | 是 | NaiveProxy Basic Auth 密码 |
-| `DECOY_DOMAIN` | 是 | 反代伪装网站域名，普通浏览器访问 `DOMAIN` 时会跳转或反代到该网站 |
+| `DECOY_DOMAIN` | 是 | 反代伪装网站域名，普通浏览器访问 `DOMAIN` 时会反代显示该网站 |
 | `EMAIL` | 否 | Let's Encrypt 账号邮箱 |
 | `HTTP_PORT` | 否 | HTTP 端口，默认 `80` |
 | `HTTPS_PORT` | 否 | HTTPS/NaiveProxy 端口，默认 `443` |
@@ -269,6 +269,7 @@ https://your_user:change_this_strong_password@proxy.example.com
 
 - 🌍 首次启动需要公网访问到 `DOMAIN:80` 和 `DOMAIN:443`，否则证书申请可能失败。
 - 🎭 `DECOY_DOMAIN` 只填写域名，不要带 `https://`，例如 `www.example.com`。
+- 🧩 复杂网站可能因为 Cookie、CSP、WebSocket 或静态资源跨域限制导致反代显示不完整，静态博客、文档站、简单官网更适合做伪装站。
 - 💾 `/var/lib/pixelcat-naiveproxy` 保存证书和 ACME 账号信息，不要随意删除。
 - ☁️ 如果域名套了 CDN，需要确认 CDN 支持 NaiveProxy 所需的 HTTPS 代理流量，否则建议 DNS 记录先仅 DNS 解析，不启用代理。
 

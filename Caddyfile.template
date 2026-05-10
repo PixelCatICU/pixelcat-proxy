@@ -17,10 +17,6 @@
 			probe_resistance
 		}
 
-		@root path /
-		header @root Content-Type "text/html; charset=utf-8"
-		respond @root `<!doctype html><html><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><title>${DECOY_DOMAIN}</title></head><body><script>location.replace("https://${DECOY_DOMAIN}/");</script><noscript><a href="https://${DECOY_DOMAIN}/">https://${DECOY_DOMAIN}/</a></noscript></body></html>` 200
-
 		reverse_proxy https://${DECOY_DOMAIN} {
 			header_up Host ${DECOY_DOMAIN}
 			header_up X-Forwarded-Host ${DOMAIN}

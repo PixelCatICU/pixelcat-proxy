@@ -492,10 +492,6 @@ write_caddyfile() {
     echo "			probe_resistance"
     echo "		}"
     echo
-    echo "		@root path /"
-    echo "		header @root Content-Type \"text/html; charset=utf-8\""
-    echo "		respond @root \`<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"referrer\" content=\"no-referrer\"><title>$DECOY_DOMAIN</title></head><body><script>location.replace(\"https://$DECOY_DOMAIN/\");</script><noscript><a href=\"https://$DECOY_DOMAIN/\">https://$DECOY_DOMAIN/</a></noscript></body></html>\` 200"
-    echo
     echo "		reverse_proxy https://$DECOY_DOMAIN {"
     echo "			header_up Host $DECOY_DOMAIN"
     echo "			header_up X-Forwarded-Host $DOMAIN"
