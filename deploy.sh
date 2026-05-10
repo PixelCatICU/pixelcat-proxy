@@ -431,6 +431,64 @@ image_revision() {
   $DOCKER_CMD image inspect "$IMAGE_REF" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' 2>/dev/null || true
 }
 
+json_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+print_sing_box_config() {
+  local json_domain
+  local json_username
+  local json_password
+
+  json_domain="$(json_escape "$DOMAIN")"
+  json_username="$(json_escape "$USERNAME")"
+  json_password="$(json_escape "$PASSWORD")"
+
+  cat <<EOF
+
+sing-box client config:
+
+{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "inbounds": [
+    {
+      "type": "mixed",
+      "tag": "mixed-in",
+      "listen": "127.0.0.1",
+      "listen_port": 2080
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "naive",
+      "tag": "naive-out",
+      "server": "$json_domain",
+      "server_port": $HTTPS_PORT,
+      "username": "$json_username",
+      "password": "$json_password",
+      "tls": {
+        "enabled": true,
+        "server_name": "$json_domain"
+      }
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "final": "naive-out",
+    "auto_detect_interface": true
+  }
+}
+
+Local mixed proxy: 127.0.0.1:2080
+EOF
+}
+
 start_stack() {
   local current_revision
   local pulled_revision
@@ -624,4 +682,5 @@ start_stack
 echo
 echo "Deployment finished."
 echo "Proxy URL: https://$USERNAME:******@$DOMAIN"
+print_sing_box_config
 echo "Logs: docker compose logs -f"
