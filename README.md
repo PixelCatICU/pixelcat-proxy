@@ -19,11 +19,11 @@
 
 # 🚀 NaiveProxy 直装部署
 
-这个项目提供 NaiveProxy 一键部署脚本：直接在服务器上编译带 `forwardproxy` 插件的 Caddy，并通过 `systemd` 运行 NaiveProxy。Caddy 会自动申请和续期 HTTPS 证书。🔒
+这个项目提供 NaiveProxy 一键部署脚本：优先下载已经编译好的 Caddy，失败时再本地编译带 `forwardproxy` 插件的 Caddy，并通过 `systemd` 运行 NaiveProxy。Caddy 会自动申请和续期 HTTPS 证书。🔒
 
 ## ✨ 功能
 
-- ⚡ 直接安装到宿主机
+- ⚡ 优先下载预编译 Caddy，部署更快
 - 🔐 自动申请和续期 Let's Encrypt 证书
 - 🎭 支持反代伪装网站域名
 - 📱 部署完成后自动打印 sing-box 客户端配置
@@ -35,7 +35,7 @@
 - 🌍 域名 `A/AAAA` 记录已经解析到这台服务器。
 - 🛡️ 服务器防火墙和云厂商安全组放行 `80/tcp` 和 `443/tcp`。
 - 🧱 系统需要 Linux + systemd。
-- 📦 脚本会自动安装基础依赖、Go、xcaddy，并编译 Caddy。
+- 📦 脚本会自动安装基础依赖；如果预编译 Caddy 下载失败，才会自动安装 Go、xcaddy 并本地编译。
 
 ## ⚡ 一键部署脚本
 
@@ -88,6 +88,15 @@ chmod +x deploy.sh
 - 📱 sing-box 客户端配置
 - 📜 日志查看命令
 
+脚本默认会优先下载 GitHub Release 中的预编译文件：
+
+```text
+caddy-naiveproxy-linux-amd64.tar.gz
+caddy-naiveproxy-linux-arm64.tar.gz
+```
+
+如果 Release 还没发布、下载失败，或者服务器架构不支持，脚本会自动切换为本地编译。
+
 ### 方式二：带参数部署
 
 也可以一次性传入参数：
@@ -102,6 +111,12 @@ chmod +x deploy.sh
 ```
 
 生产环境更推荐交互式输入密码，因为 `--password` 参数可能被 shell 历史或进程列表记录。
+
+如果你想强制本地编译，不下载预编译文件：
+
+```bash
+./deploy.sh --install --build-from-source
+```
 
 ### 方式三：只生成配置
 
@@ -256,3 +271,23 @@ https://your_user:change_this_strong_password@proxy.example.com
 - 🎭 `DECOY_DOMAIN` 只填写域名，不要带 `https://`，例如 `www.example.com`。
 - 💾 `/var/lib/pixelcat-naiveproxy` 保存证书和 ACME 账号信息，不要随意删除。
 - ☁️ 如果域名套了 CDN，需要确认 CDN 支持 NaiveProxy 所需的 HTTPS 代理流量，否则建议 DNS 记录先仅 DNS 解析，不启用代理。
+
+## 📦 发布预编译 Caddy
+
+这个项目内置 GitHub Actions，会在发布 GitHub Release 时自动编译：
+
+```text
+caddy-naiveproxy-linux-amd64.tar.gz
+caddy-naiveproxy-linux-arm64.tar.gz
+```
+
+发布方式：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+然后在 GitHub 仓库页面创建 Release，选择这个 tag 并发布。发布后 Actions 会自动把二进制文件上传到 Release Assets。
+
+也可以在 GitHub Actions 页面手动运行 `Build Caddy NaiveProxy`，先检查构建是否正常。

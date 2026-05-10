@@ -1,0 +1,64 @@
+name: Build Caddy NaiveProxy
+
+on:
+  workflow_dispatch:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build linux-${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+          - arch: arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install xcaddy
+        run: go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+
+      - name: Build Caddy
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          "$(go env GOPATH)/bin/xcaddy" build \
+            --output caddy-naiveproxy \
+            --with github.com/caddyserver/forwardproxy
+
+      - name: Package
+        run: |
+          asset="caddy-naiveproxy-linux-${{ matrix.arch }}.tar.gz"
+          tar -czf "$asset" caddy-naiveproxy
+          sha256sum "$asset" > "$asset.sha256"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: caddy-naiveproxy-linux-${{ matrix.arch }}
+          path: |
+            caddy-naiveproxy-linux-${{ matrix.arch }}.tar.gz
+            caddy-naiveproxy-linux-${{ matrix.arch }}.tar.gz.sha256
+
+      - name: Upload release assets
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            caddy-naiveproxy-linux-${{ matrix.arch }}.tar.gz
+            caddy-naiveproxy-linux-${{ matrix.arch }}.tar.gz.sha256

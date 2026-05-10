@@ -20,6 +20,8 @@ SERVICE_FILE="/etc/systemd/system/pixelcat-naiveproxy.service"
 GO_ROOT="/usr/local/go-pixelcat"
 GO_BIN=""
 XCADDY_BIN="/usr/local/bin/xcaddy"
+RELEASE_BASE_URL="${RELEASE_BASE_URL:-https://github.com/PixelCatICU/pixelcat-naiveproxy/releases/latest/download}"
+BUILD_FROM_SOURCE="false"
 
 usage() {
   cat <<'USAGE'
@@ -37,6 +39,8 @@ PixelCat NaiveProxy 一键脚本
       --uninstall       停止并删除 NaiveProxy systemd 服务
       --purge           配合 --uninstall 使用，同时删除配置和证书数据
       --bbr             一键开启 BBR
+      --build-from-source
+                        跳过预编译文件下载，直接本地编译 Caddy
   -d, --domain          代理域名，必填
   -u, --username        NaiveProxy 用户名，必填
   -p, --password        NaiveProxy 密码，必填
@@ -75,6 +79,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --bbr)
       ACTION="bbr"
+      shift
+      ;;
+    --build-from-source)
+      BUILD_FROM_SOURCE="true"
       shift
       ;;
     -d|--domain)
@@ -322,6 +330,63 @@ install_base_packages() {
   esac
 }
 
+linux_arch() {
+  local arch
+  arch="$(uname -m)"
+  case "$arch" in
+    x86_64|amd64)
+      printf '%s' "amd64"
+      ;;
+    aarch64|arm64)
+      printf '%s' "arm64"
+      ;;
+    *)
+      echo "暂不支持的架构：$arch" >&2
+      return 1
+      ;;
+  esac
+}
+
+download_prebuilt_caddy() {
+  local arch asset checksum_url tmp_dir archive checksum_file tmp_bin
+
+  if [ "$BUILD_FROM_SOURCE" = "true" ]; then
+    return 1
+  fi
+
+  arch="$(linux_arch)" || return 1
+  asset="caddy-naiveproxy-linux-${arch}.tar.gz"
+  checksum_url="${RELEASE_BASE_URL}/${asset}.sha256"
+  tmp_dir="$(mktemp -d)"
+  archive="$tmp_dir/$asset"
+  checksum_file="$tmp_dir/$asset.sha256"
+  tmp_bin="$tmp_dir/caddy-naiveproxy"
+
+  echo
+  echo "正在下载预编译 Caddy：$asset"
+  if ! curl -fL "${RELEASE_BASE_URL}/${asset}" -o "$archive"; then
+    echo "预编译 Caddy 下载失败，准备改用本地编译。"
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  if command -v sha256sum >/dev/null 2>&1 && curl -fsSL "$checksum_url" -o "$checksum_file"; then
+    (cd "$tmp_dir" && sha256sum -c "$(basename "$checksum_file")")
+  fi
+
+  tar -C "$tmp_dir" -xzf "$archive"
+  if [ ! -x "$tmp_bin" ]; then
+    echo "预编译 Caddy 包格式不正确，准备改用本地编译。" >&2
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  run_as_root install -m 0755 "$tmp_bin" "$CADDY_BIN"
+  rm -rf "$tmp_dir"
+  echo "已安装预编译 Caddy：$CADDY_BIN"
+  return 0
+}
+
 go_version_ok() {
   local go_cmd="$1"
   local version major minor
@@ -339,20 +404,8 @@ select_or_install_go() {
     return
   fi
 
-  local arch go_arch go_version url tmp_dir tarball extract_dir
-  arch="$(uname -m)"
-  case "$arch" in
-    x86_64|amd64)
-      go_arch="amd64"
-      ;;
-    aarch64|arm64)
-      go_arch="arm64"
-      ;;
-    *)
-      echo "暂不支持自动安装 Go 的架构：$arch" >&2
-      exit 1
-      ;;
-  esac
+  local go_arch go_version url tmp_dir tarball extract_dir
+  go_arch="$(linux_arch)"
 
   go_version="$(curl -fsSL 'https://go.dev/VERSION?m=text' | sed -n '1p')"
   if [ -z "$go_version" ]; then
@@ -537,9 +590,11 @@ install_stack() {
   need_linux
   need_systemd
   install_base_packages
-  select_or_install_go
-  install_xcaddy
-  build_caddy
+  if ! download_prebuilt_caddy; then
+    select_or_install_go
+    install_xcaddy
+    build_caddy
+  fi
   write_caddyfile
   write_service
 
