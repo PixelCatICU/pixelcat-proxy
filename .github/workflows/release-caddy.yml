@@ -2,6 +2,9 @@ name: Build Caddy NaiveProxy
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - "v*"
   release:
     types:
       - published
@@ -56,7 +59,7 @@ jobs:
             caddy-naiveproxy-linux-${{ matrix.arch }}.tar.gz.sha256
 
       - name: Upload release assets
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
