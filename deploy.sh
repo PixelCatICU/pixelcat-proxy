@@ -6,43 +6,47 @@ USERNAME="${USERNAME:-}"
 PASSWORD="${PASSWORD:-}"
 DECOY_DOMAIN="${DECOY_DOMAIN:-}"
 EMAIL="${EMAIL:-}"
-HTTP_PORT="${HTTP_PORT:-80}"
-HTTPS_PORT="${HTTPS_PORT:-443}"
+HTTP_PORT="${HTTP_PORT:-}"
+HTTPS_PORT="${HTTPS_PORT:-}"
 ASSUME_YES="false"
 SKIP_START="false"
-INSTALL_DOCKER="auto"
 PASSWORD_FROM_ARG="false"
-DOCKER_CMD="docker"
 ACTION="menu"
 PURGE="false"
-IMAGE_REF="ghcr.io/pixelcaticu/pixelcat-naiveproxy:latest"
+INSTALL_DIR="/etc/pixelcat-naiveproxy"
+DATA_DIR="/var/lib/pixelcat-naiveproxy"
+CADDY_BIN="/usr/local/bin/caddy-naiveproxy"
+SERVICE_FILE="/etc/systemd/system/pixelcat-naiveproxy.service"
+GO_ROOT="/usr/local/go-pixelcat"
+GO_BIN=""
+XCADDY_BIN="/usr/local/bin/xcaddy"
 
 usage() {
   cat <<'USAGE'
-PixelCat NaiveProxy one-click deploy script
+PixelCat NaiveProxy 一键脚本
 
-Usage:
-  ./deploy.sh                 Show interactive menu
-  ./deploy.sh --install
-  ./deploy.sh --uninstall
+用法:
+  ./deploy.sh                 显示中文菜单
+  ./deploy.sh --install       安装或更新 NaiveProxy
+  ./deploy.sh --uninstall     卸载 NaiveProxy
+  ./deploy.sh --bbr           一键开启 BBR
   ./deploy.sh --domain proxy.example.com --username user --password pass --decoy-domain www.example.com --email admin@example.com
 
-Options:
-      --install         Install or update NaiveProxy, default action
-      --uninstall       Stop and remove NaiveProxy containers
-      --purge           With --uninstall, also remove volumes and .env
-  -d, --domain          Proxy domain, required
-  -u, --username        NaiveProxy username, required
-  -p, --password        NaiveProxy password, required
-      --decoy-domain    Decoy reverse proxy domain, required
-  -e, --email           ACME email, optional
-      --http-port       Host HTTP port, default: 80
-      --https-port      Host HTTPS port, default: 443
-  -y, --yes             Overwrite .env without asking
-      --skip-start      Only write .env, do not run docker compose
-      --no-install-docker
-                           Do not install Docker automatically
-  -h, --help            Show help
+选项:
+      --install         安装或更新 NaiveProxy
+      --uninstall       停止并删除 NaiveProxy systemd 服务
+      --purge           配合 --uninstall 使用，同时删除配置和证书数据
+      --bbr             一键开启 BBR
+  -d, --domain          代理域名，必填
+  -u, --username        NaiveProxy 用户名，必填
+  -p, --password        NaiveProxy 密码，必填
+      --decoy-domain    伪装网站域名，必填
+  -e, --email           Let's Encrypt 证书邮箱，可选
+      --http-port       宿主机 HTTP 端口，默认 80
+      --https-port      宿主机 HTTPS 端口，默认 443
+  -y, --yes             自动确认覆盖 .env
+      --skip-start      只生成配置，不启动服务
+  -h, --help            显示帮助
 USAGE
 }
 
@@ -50,7 +54,7 @@ require_option_value() {
   local option="$1"
   local value="${2:-}"
   if [ -z "$value" ]; then
-    echo "$option requires a value." >&2
+    echo "$option 需要一个值。" >&2
     exit 1
   fi
 }
@@ -67,6 +71,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --purge)
       PURGE="true"
+      shift
+      ;;
+    --bbr)
+      ACTION="bbr"
       shift
       ;;
     -d|--domain)
@@ -113,16 +121,12 @@ while [ "$#" -gt 0 ]; do
       SKIP_START="true"
       shift
       ;;
-    --no-install-docker)
-      INSTALL_DOCKER="false"
-      shift
-      ;;
     -h|--help)
       usage
       exit 0
       ;;
     *)
-      echo "Unknown option: $1" >&2
+      echo "未知选项: $1" >&2
       usage >&2
       exit 1
       ;;
@@ -130,15 +134,26 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ "$PURGE" = "true" ] && [ "$ACTION" != "uninstall" ]; then
-  echo "--purge can only be used with --uninstall." >&2
+  echo "--purge 只能和 --uninstall 一起使用。" >&2
   exit 1
 fi
 
 if [ "$ACTION" = "menu" ]; then
-  if [ -n "$DOMAIN" ] || [ -n "$USERNAME" ] || [ -n "$PASSWORD" ] || [ -n "$DECOY_DOMAIN" ] || [ -n "$EMAIL" ] || [ "$SKIP_START" = "true" ] || [ "$INSTALL_DOCKER" = "false" ]; then
+  if [ -n "$DOMAIN" ] || [ -n "$USERNAME" ] || [ -n "$PASSWORD" ] || [ -n "$DECOY_DOMAIN" ] || [ -n "$EMAIL" ] || [ "$SKIP_START" = "true" ]; then
     ACTION="install"
   fi
 fi
+
+run_as_root() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo "$@"
+  else
+    echo "需要 root 权限，但系统没有 sudo。请使用 root 运行脚本。" >&2
+    exit 1
+  fi
+}
 
 prompt_value() {
   local var_name="$1"
@@ -165,7 +180,7 @@ prompt_value() {
       return
     fi
 
-    echo "$var_name cannot be empty." >&2
+    echo "$var_name 不能为空。" >&2
   done
 }
 
@@ -180,11 +195,16 @@ prompt_optional() {
     return
   fi
 
+  if [ "$ASSUME_YES" = "true" ]; then
+    printf '%s' "$default_value"
+    return
+  fi
+
   if [ -n "$default_value" ]; then
     read -r -p "$label [$default_value]: " input
     printf '%s' "${input:-$default_value}"
   else
-    read -r -p "$label, optional: " input
+    read -r -p "$label，可留空: " input
     printf '%s' "$input"
   fi
 }
@@ -242,211 +262,247 @@ write_env_line() {
   printf '%s="%s"\n' "$key" "$escaped"
 }
 
-run_as_root() {
-  if [ "$(id -u)" -eq 0 ]; then
-    "$@"
-  elif command -v sudo >/dev/null 2>&1; then
-    sudo "$@"
-  else
-    echo "This command needs root privileges, but sudo is not installed." >&2
-    exit 1
-  fi
-}
-
-install_docker() {
-  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-    return
-  fi
-
-  if [ "$INSTALL_DOCKER" = "false" ]; then
-    echo "Docker is not installed. Install Docker first, then rerun this script." >&2
-    exit 1
-  fi
-
-  if [ "$ASSUME_YES" != "true" ]; then
-    read -r -p "Docker is not installed. Install Docker Engine now? [y/N]: " install_confirm
-    case "$install_confirm" in
-      y|Y|yes|YES)
-        ;;
-      *)
-        echo "Canceled. Install Docker first, then rerun this script."
-        exit 0
-        ;;
-    esac
-  fi
-
-  if [ "$(uname -s)" != "Linux" ]; then
-    echo "Automatic Docker installation only supports Linux." >&2
-    echo "Install Docker Desktop manually, then rerun this script." >&2
-    exit 1
-  fi
-
-  if [ -f /etc/os-release ]; then
-    # shellcheck disable=SC1091
-    . /etc/os-release
-  else
-    echo "Cannot detect Linux distribution: /etc/os-release not found." >&2
-    exit 1
-  fi
-
-  local distro_id="${ID:-}"
-  local distro_like="${ID_LIKE:-}"
-
-  echo
-  echo "Installing Docker Engine..."
-
-  case "$distro_id $distro_like" in
-    *ubuntu*|*debian*)
-      local docker_repo_os="$distro_id"
-      if [ "$distro_id" != "ubuntu" ] && [ "$distro_id" != "debian" ]; then
-        if echo "$distro_like" | grep -q "ubuntu"; then
-          docker_repo_os="ubuntu"
-        elif echo "$distro_like" | grep -q "debian"; then
-          docker_repo_os="debian"
-        fi
-      fi
-      run_as_root apt-get update
-      run_as_root apt-get install -y ca-certificates curl gnupg
-      run_as_root install -m 0755 -d /etc/apt/keyrings
-      if [ ! -f /etc/apt/keyrings/docker.asc ]; then
-        run_as_root curl -fsSL https://download.docker.com/linux/"$docker_repo_os"/gpg -o /etc/apt/keyrings/docker.asc
-        run_as_root chmod a+r /etc/apt/keyrings/docker.asc
-      fi
-      local arch
-      arch="$(dpkg --print-architecture)"
-      local codename="${VERSION_CODENAME:-}"
-      if [ -z "$codename" ] && command -v lsb_release >/dev/null 2>&1; then
-        codename="$(lsb_release -cs)"
-      fi
-      if [ -z "$codename" ]; then
-        echo "Cannot detect Debian/Ubuntu codename." >&2
-        exit 1
-      fi
-      echo "deb [arch=$arch signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/$docker_repo_os $codename stable" | run_as_root tee /etc/apt/sources.list.d/docker.list >/dev/null
-      run_as_root apt-get update
-      run_as_root apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-      ;;
-    *centos*|*rhel*|*rocky*|*almalinux*|*fedora*)
-      if command -v dnf >/dev/null 2>&1; then
-        run_as_root dnf install -y dnf-plugins-core
-        run_as_root dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-        run_as_root dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-      elif command -v yum >/dev/null 2>&1; then
-        run_as_root yum install -y yum-utils
-        run_as_root yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-        run_as_root yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-      else
-        echo "Neither dnf nor yum is available." >&2
-        exit 1
-      fi
-      ;;
-    *alpine*)
-      run_as_root apk add --no-cache docker docker-cli-compose
-      ;;
-    *)
-      echo "Unsupported Linux distribution: ${PRETTY_NAME:-unknown}" >&2
-      echo "Install Docker manually, then rerun this script." >&2
-      exit 1
-      ;;
-  esac
-
-  if command -v systemctl >/dev/null 2>&1; then
-    run_as_root systemctl enable --now docker
-  elif command -v service >/dev/null 2>&1; then
-    run_as_root service docker start || true
-  fi
-
-  if ! command -v docker >/dev/null 2>&1; then
-    echo "Docker installation finished, but docker command is still unavailable." >&2
-    exit 1
-  fi
-
-  if ! docker compose version >/dev/null 2>&1; then
-    echo "Docker Compose plugin is not available after installation." >&2
-    exit 1
-  fi
-}
-
-configure_docker_command() {
-  if docker compose version >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-    DOCKER_CMD="docker"
-    return
-  fi
-
-  if command -v sudo >/dev/null 2>&1 && sudo docker compose version >/dev/null 2>&1 && sudo docker info >/dev/null 2>&1; then
-    DOCKER_CMD="sudo docker"
-    return
-  fi
-
-  echo "Docker is installed, but the current user cannot access the Docker daemon." >&2
-  echo "Try rerunning this script as root, or add your user to the docker group and log in again." >&2
-  exit 1
-}
-
-uninstall_stack() {
-  if ! command -v docker >/dev/null 2>&1; then
-    echo "Docker is not installed. Nothing to uninstall."
-    exit 0
-  fi
-
-  configure_docker_command
-
-  if [ "$ASSUME_YES" != "true" ]; then
-    if [ "$PURGE" = "true" ]; then
-      read -r -p "确认卸载 NaiveProxy，并删除证书数据卷和 .env？[y/N]: " uninstall_confirm
-    else
-      read -r -p "确认卸载 NaiveProxy 容器？证书数据卷会保留。[y/N]: " uninstall_confirm
-    fi
-    case "$uninstall_confirm" in
-      y|Y|yes|YES)
-        ;;
-      *)
-        echo "Canceled."
-        exit 0
-        ;;
-    esac
-  fi
-
-  echo
-  if [ "$PURGE" = "true" ]; then
-    echo "正在停止容器并删除数据卷..."
-    $DOCKER_CMD compose down -v --remove-orphans
-    if [ -f ".env" ]; then
-      rm -f .env
-      echo "已删除 .env。"
-    fi
-  else
-    echo "正在停止容器..."
-    $DOCKER_CMD compose down --remove-orphans
-  fi
-
-  echo "卸载完成。"
-}
-
-current_git_revision() {
-  git rev-parse HEAD 2>/dev/null || true
-}
-
-image_revision() {
-  $DOCKER_CMD image inspect "$IMAGE_REF" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' 2>/dev/null || true
-}
-
 json_escape() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
-print_sing_box_config() {
-  local json_domain
-  local json_username
-  local json_password
+caddy_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
 
+need_linux() {
+  if [ "$(uname -s)" != "Linux" ]; then
+    echo "直装模式只支持 Linux。" >&2
+    exit 1
+  fi
+}
+
+need_systemd() {
+  if ! command -v systemctl >/dev/null 2>&1; then
+    echo "直装模式需要 systemd，但当前系统没有 systemctl。" >&2
+    exit 1
+  fi
+}
+
+install_base_packages() {
+  if [ -f /etc/os-release ]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+  else
+    echo "无法识别 Linux 发行版：缺少 /etc/os-release。" >&2
+    exit 1
+  fi
+
+  echo
+  echo "正在安装基础依赖..."
+
+  case "${ID:-} ${ID_LIKE:-}" in
+    *ubuntu*|*debian*)
+      run_as_root apt-get update
+      run_as_root apt-get install -y ca-certificates curl tar gzip git
+      ;;
+    *centos*|*rhel*|*rocky*|*almalinux*|*fedora*)
+      if command -v dnf >/dev/null 2>&1; then
+        run_as_root dnf install -y ca-certificates curl tar gzip git
+      elif command -v yum >/dev/null 2>&1; then
+        run_as_root yum install -y ca-certificates curl tar gzip git
+      else
+        echo "未找到 dnf 或 yum。" >&2
+        exit 1
+      fi
+      ;;
+    *alpine*)
+      run_as_root apk add --no-cache ca-certificates curl tar gzip git
+      ;;
+    *)
+      echo "暂不支持自动安装依赖的系统：${PRETTY_NAME:-unknown}" >&2
+      echo "请先手动安装 ca-certificates curl tar gzip git 后重试。" >&2
+      exit 1
+      ;;
+  esac
+}
+
+go_version_ok() {
+  local go_cmd="$1"
+  local version major minor
+  version="$("$go_cmd" version 2>/dev/null | awk '{print $3}' | sed 's/^go//; s/[^0-9.].*$//')"
+  major="${version%%.*}"
+  minor="${version#*.}"
+  minor="${minor%%.*}"
+  [ -n "$major" ] && [ -n "$minor" ] || return 1
+  [ "$major" -gt 1 ] || { [ "$major" -eq 1 ] && [ "$minor" -ge 22 ]; }
+}
+
+select_or_install_go() {
+  if command -v go >/dev/null 2>&1 && go_version_ok "$(command -v go)"; then
+    GO_BIN="$(command -v go)"
+    return
+  fi
+
+  local arch go_arch go_version url tmp_dir tarball extract_dir
+  arch="$(uname -m)"
+  case "$arch" in
+    x86_64|amd64)
+      go_arch="amd64"
+      ;;
+    aarch64|arm64)
+      go_arch="arm64"
+      ;;
+    *)
+      echo "暂不支持自动安装 Go 的架构：$arch" >&2
+      exit 1
+      ;;
+  esac
+
+  go_version="$(curl -fsSL 'https://go.dev/VERSION?m=text' | sed -n '1p')"
+  if [ -z "$go_version" ]; then
+    echo "无法获取 Go 最新版本号。" >&2
+    exit 1
+  fi
+
+  url="https://go.dev/dl/${go_version}.linux-${go_arch}.tar.gz"
+  tmp_dir="$(mktemp -d)"
+  tarball="$tmp_dir/go.tar.gz"
+  extract_dir="$tmp_dir/extract"
+
+  echo
+  echo "正在安装 Go：$go_version"
+  curl -fL "$url" -o "$tarball"
+  run_as_root rm -rf "$GO_ROOT"
+  mkdir -p "$extract_dir"
+  tar -C "$extract_dir" -xzf "$tarball"
+  run_as_root mv "$extract_dir/go" "$GO_ROOT"
+  rm -rf "$tmp_dir"
+
+  GO_BIN="$GO_ROOT/bin/go"
+  if [ ! -x "$GO_BIN" ]; then
+    echo "Go 安装失败：$GO_BIN 不存在。" >&2
+    exit 1
+  fi
+}
+
+install_xcaddy() {
+  if [ -x "$XCADDY_BIN" ]; then
+    return
+  fi
+
+  echo
+  echo "正在安装 xcaddy..."
+  run_as_root env GOBIN=/usr/local/bin "$GO_BIN" install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+
+  if [ ! -x "$XCADDY_BIN" ]; then
+    echo "xcaddy 安装失败：$XCADDY_BIN 不存在。" >&2
+    exit 1
+  fi
+}
+
+build_caddy() {
+  local tmp_bin
+  tmp_bin="$(mktemp)"
+  rm -f "$tmp_bin"
+
+  echo
+  echo "正在编译带 NaiveProxy 支持的 Caddy..."
+  env XCADDY_WHICH_GO="$GO_BIN" "$XCADDY_BIN" build --output "$tmp_bin" --with github.com/caddyserver/forwardproxy
+  run_as_root install -m 0755 "$tmp_bin" "$CADDY_BIN"
+  rm -f "$tmp_bin"
+}
+
+stop_legacy_docker_stack() {
+  if ! command -v docker >/dev/null 2>&1; then
+    return
+  fi
+
+  if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx 'naiveproxy-caddy'; then
+    echo
+    echo "检测到旧 Docker 容器 naiveproxy-caddy，正在停止以释放端口..."
+    docker rm -f naiveproxy-caddy >/dev/null 2>&1 || true
+  fi
+}
+
+write_caddyfile() {
+  local caddy_user caddy_pass
+  caddy_user="$(caddy_escape "$USERNAME")"
+  caddy_pass="$(caddy_escape "$PASSWORD")"
+
+  run_as_root mkdir -p "$INSTALL_DIR" "$DATA_DIR"
+
+  {
+    echo "{"
+    echo "	admin off"
+    echo "	order forward_proxy before reverse_proxy"
+    echo "	http_port $HTTP_PORT"
+    echo "	https_port $HTTPS_PORT"
+    if [ -n "$EMAIL" ]; then
+      echo "	email $EMAIL"
+    fi
+    echo "}"
+    echo
+    echo ":$HTTPS_PORT, $DOMAIN {"
+    echo "	tls {"
+    echo "		protocols tls1.2 tls1.3"
+    echo "	}"
+    echo
+    echo "	route {"
+    echo "		forward_proxy {"
+    echo "			basic_auth \"$caddy_user\" \"$caddy_pass\""
+    echo "			hide_ip"
+    echo "			hide_via"
+    echo "			probe_resistance"
+    echo "		}"
+    echo
+    echo "		@root path /"
+    echo "		header @root Content-Type \"text/html; charset=utf-8\""
+    echo "		respond @root \`<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"referrer\" content=\"no-referrer\"><title>$DECOY_DOMAIN</title></head><body><script>location.replace(\"https://$DECOY_DOMAIN/\");</script><noscript><a href=\"https://$DECOY_DOMAIN/\">https://$DECOY_DOMAIN/</a></noscript></body></html>\` 200"
+    echo
+    echo "		reverse_proxy https://$DECOY_DOMAIN {"
+    echo "			header_up Host $DECOY_DOMAIN"
+    echo "			header_up X-Forwarded-Host $DOMAIN"
+    echo "			header_up X-Forwarded-Proto https"
+    echo "		}"
+    echo "	}"
+    echo "}"
+  } | run_as_root tee "$INSTALL_DIR/Caddyfile" >/dev/null
+}
+
+write_service() {
+  cat <<EOF | run_as_root tee "$SERVICE_FILE" >/dev/null
+[Unit]
+Description=PixelCat NaiveProxy
+Documentation=https://github.com/PixelCatICU/pixelcat-naiveproxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+Environment=HOME=$DATA_DIR
+Environment=XDG_DATA_HOME=$DATA_DIR
+Environment=XDG_CONFIG_HOME=$INSTALL_DIR
+ExecStart=$CADDY_BIN run --config $INSTALL_DIR/Caddyfile --adapter caddyfile
+ExecReload=$CADDY_BIN reload --config $INSTALL_DIR/Caddyfile --adapter caddyfile --force
+Restart=on-failure
+RestartSec=5s
+LimitNOFILE=1048576
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+print_sing_box_config() {
+  local json_domain json_username json_password
   json_domain="$(json_escape "$DOMAIN")"
   json_username="$(json_escape "$USERNAME")"
   json_password="$(json_escape "$PASSWORD")"
 
   cat <<EOF
 
-sing-box client config:
+sing-box 客户端配置:
 
 {
   "log": {
@@ -485,45 +541,99 @@ sing-box client config:
   }
 }
 
-Local mixed proxy: 127.0.0.1:2080
+本地 mixed 代理: 127.0.0.1:2080
 EOF
 }
 
-start_stack() {
-  local current_revision
-  local pulled_revision
+install_stack() {
+  need_linux
+  need_systemd
+  stop_legacy_docker_stack
+  install_base_packages
+  select_or_install_go
+  install_xcaddy
+  build_caddy
+  write_caddyfile
+  write_service
 
-  current_revision="$(current_git_revision)"
-
-  echo
-  echo "Pulling image and starting service..."
-  $DOCKER_CMD compose pull
-
-  pulled_revision="$(image_revision)"
-  if [ -n "$current_revision" ] && [ -n "$pulled_revision" ]; then
-    case "$pulled_revision" in
-      "$current_revision"*)
-        $DOCKER_CMD compose up -d
-        return
-        ;;
-    esac
-
-    echo
-    echo "GHCR image is not up to date with this project checkout."
-    echo "Image revision: ${pulled_revision}"
-    echo "Project revision: ${current_revision}"
-    echo "Falling back to local Docker build..."
-
-    if [ ! -f docker-compose.build.yml ]; then
-      echo "docker-compose.build.yml not found; cannot build locally." >&2
-      exit 1
-    fi
-
-    $DOCKER_CMD compose -f docker-compose.build.yml up -d --build
-    return
+  if [ "$SKIP_START" = "true" ]; then
+    echo "已生成配置，按要求未启动服务。"
+    exit 0
   fi
 
-  $DOCKER_CMD compose up -d
+  echo
+  echo "正在启动 NaiveProxy systemd 服务..."
+  run_as_root systemctl daemon-reload
+  run_as_root systemctl enable --now pixelcat-naiveproxy
+
+  echo
+  echo "部署完成。"
+  echo "服务状态: systemctl status pixelcat-naiveproxy --no-pager"
+  echo "代理地址: https://$USERNAME:******@$DOMAIN"
+  print_sing_box_config
+  echo "查看日志: journalctl -u pixelcat-naiveproxy -f"
+}
+
+uninstall_stack() {
+  need_linux
+  need_systemd
+
+  if [ "$ASSUME_YES" != "true" ]; then
+    if [ "$PURGE" = "true" ]; then
+      read -r -p "确认卸载 NaiveProxy，并删除配置、证书数据和本地 Go 工具？[y/N]: " uninstall_confirm
+    else
+      read -r -p "确认卸载 NaiveProxy 服务？配置和证书数据会保留。[y/N]: " uninstall_confirm
+    fi
+    case "$uninstall_confirm" in
+      y|Y|yes|YES)
+        ;;
+      *)
+        echo "已取消。"
+        exit 0
+        ;;
+    esac
+  fi
+
+  echo
+  echo "正在停止并删除 systemd 服务..."
+  run_as_root systemctl disable --now pixelcat-naiveproxy >/dev/null 2>&1 || true
+  run_as_root rm -f "$SERVICE_FILE"
+  run_as_root systemctl daemon-reload
+  run_as_root rm -f "$CADDY_BIN"
+
+  if [ "$PURGE" = "true" ]; then
+    run_as_root rm -rf "$INSTALL_DIR" "$DATA_DIR" "$GO_ROOT"
+    run_as_root rm -f "$XCADDY_BIN"
+    if [ -f ".env" ]; then
+      rm -f .env
+    fi
+    echo "已删除配置、证书数据、.env 和本地 Go 工具。"
+  fi
+
+  echo "卸载完成。"
+}
+
+enable_bbr() {
+  need_linux
+
+  echo
+  echo "正在开启 BBR..."
+  cat <<'EOF' | run_as_root tee /etc/sysctl.d/99-pixelcat-bbr.conf >/dev/null
+net.core.default_qdisc=fq
+net.ipv4.tcp_congestion_control=bbr
+EOF
+
+  run_as_root sysctl --system >/dev/null
+
+  echo "当前拥塞控制算法: $(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || true)"
+  echo "当前队列算法: $(sysctl -n net.core.default_qdisc 2>/dev/null || true)"
+
+  if [ "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || true)" = "bbr" ]; then
+    echo "BBR 已开启。"
+  else
+    echo "BBR 未成功开启，可能是内核不支持。请检查内核版本。" >&2
+    exit 1
+  fi
 }
 
 show_menu() {
@@ -542,12 +652,13 @@ YouTube: https://www.youtube.com/@PixelCatICU
 GitHub: https://github.com/PixelCatICU
 X: https://x.com/PixelCatICU
 
-1) 安装 / 更新
-2) 卸载
+1) 安装 / 更新 NaiveProxy
+2) 卸载 NaiveProxy
+3) 一键开启 BBR
 0) 退出
 
 MENU
-    read -r -p "请输入选项 [1/2/0]: " choice
+    read -r -p "请输入选项 [1/2/3/0]: " choice
     case "$choice" in
       1)
         ACTION="install"
@@ -556,13 +667,17 @@ MENU
       2)
         ACTION="uninstall"
         if [ "$ASSUME_YES" != "true" ]; then
-          read -r -p "是否同时删除证书数据卷和 .env？[y/N]: " purge_confirm
+          read -r -p "是否同时删除配置和证书数据？[y/N]: " purge_confirm
           case "$purge_confirm" in
             y|Y|yes|YES)
               PURGE="true"
               ;;
           esac
         fi
+        return
+        ;;
+      3)
+        ACTION="bbr"
         return
         ;;
       0)
@@ -585,69 +700,74 @@ if [ "$ACTION" = "uninstall" ]; then
   exit 0
 fi
 
-DOMAIN="$(strip_scheme "$(prompt_value DOMAIN "Proxy domain, for example proxy.example.com" "$DOMAIN")")"
-USERNAME="$(prompt_value USERNAME "NaiveProxy username" "$USERNAME")"
-PASSWORD="$(prompt_value PASSWORD "NaiveProxy password" "$PASSWORD" true)"
-DECOY_DOMAIN="$(strip_scheme "$(prompt_value DECOY_DOMAIN "Decoy domain, for example www.example.com" "$DECOY_DOMAIN")")"
-EMAIL="$(prompt_optional "ACME email" "$EMAIL")"
-HTTP_PORT="$(prompt_optional "Host HTTP port" "$HTTP_PORT" "80")"
-HTTPS_PORT="$(prompt_optional "Host HTTPS port" "$HTTPS_PORT" "443")"
+if [ "$ACTION" = "bbr" ]; then
+  enable_bbr
+  exit 0
+fi
+
+DOMAIN="$(strip_scheme "$(prompt_value DOMAIN "请输入代理域名，例如 proxy.example.com" "$DOMAIN")")"
+USERNAME="$(prompt_value USERNAME "请输入 NaiveProxy 用户名" "$USERNAME")"
+PASSWORD="$(prompt_value PASSWORD "请输入 NaiveProxy 密码" "$PASSWORD" true)"
+DECOY_DOMAIN="$(strip_scheme "$(prompt_value DECOY_DOMAIN "请输入伪装网站域名，例如 www.example.com" "$DECOY_DOMAIN")")"
+EMAIL="$(prompt_optional "请输入证书邮箱" "$EMAIL")"
+HTTP_PORT="$(prompt_optional "请输入 HTTP 端口" "$HTTP_PORT" "80")"
+HTTPS_PORT="$(prompt_optional "请输入 HTTPS 端口" "$HTTPS_PORT" "443")"
 
 if [ "$PASSWORD_FROM_ARG" = "true" ]; then
-  echo "Warning: passing --password can expose it in shell history and process lists." >&2
-  echo "For production, run ./deploy.sh and enter the password interactively." >&2
+  echo "警告：通过 --password 传入密码可能会被 shell 历史或进程列表记录。" >&2
+  echo "生产环境更推荐运行 ./deploy.sh 后交互式输入密码。" >&2
 fi
 
 if ! is_valid_host "$DOMAIN"; then
-  echo "Invalid DOMAIN: $DOMAIN" >&2
+  echo "代理域名无效: $DOMAIN" >&2
   exit 1
 fi
 
 if ! is_valid_host "$DECOY_DOMAIN"; then
-  echo "Invalid DECOY_DOMAIN: $DECOY_DOMAIN" >&2
+  echo "伪装网站域名无效: $DECOY_DOMAIN" >&2
   exit 1
 fi
 
 if ! is_valid_username "$USERNAME"; then
-  echo "Invalid USERNAME: use 1-128 characters: A-Z a-z 0-9 . _ ~ -" >&2
+  echo "用户名无效：只能使用 1-128 位字符：A-Z a-z 0-9 . _ ~ -" >&2
   exit 1
 fi
 
 if [ "$DOMAIN" = "$DECOY_DOMAIN" ]; then
-  echo "DOMAIN and DECOY_DOMAIN should not be the same." >&2
+  echo "代理域名和伪装网站域名不能相同。" >&2
   exit 1
 fi
 
 if [ -n "$EMAIL" ] && ! printf '%s' "$EMAIL" | grep -Eq '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'; then
-  echo "Invalid EMAIL: $EMAIL" >&2
+  echo "证书邮箱无效: $EMAIL" >&2
   exit 1
 fi
 
 if ! is_valid_port "$HTTP_PORT"; then
-  echo "Invalid HTTP_PORT: $HTTP_PORT" >&2
+  echo "HTTP 端口无效: $HTTP_PORT" >&2
   exit 1
 fi
 
 if ! is_valid_port "$HTTPS_PORT"; then
-  echo "Invalid HTTPS_PORT: $HTTPS_PORT" >&2
+  echo "HTTPS 端口无效: $HTTPS_PORT" >&2
   exit 1
 fi
 
 for value_name in DOMAIN USERNAME PASSWORD DECOY_DOMAIN EMAIL HTTP_PORT HTTPS_PORT; do
   value="$(eval "printf '%s' \"\${$value_name}\"")"
   if ! is_safe_env_value "$value"; then
-    echo "$value_name cannot contain newlines." >&2
+    echo "$value_name 不能包含换行符。" >&2
     exit 1
   fi
 done
 
 if [ -f ".env" ] && [ "$ASSUME_YES" != "true" ]; then
-  read -r -p ".env already exists. Overwrite it? [y/N]: " overwrite
+  read -r -p ".env 已存在，是否覆盖？[y/N]: " overwrite
   case "$overwrite" in
     y|Y|yes|YES)
       ;;
     *)
-      echo "Canceled."
+      echo "已取消。"
       exit 0
       ;;
   esac
@@ -666,21 +786,6 @@ fi
 chmod 600 .env
 
 echo
-echo ".env has been written."
+echo ".env 已写入。"
 
-if [ "$SKIP_START" = "true" ]; then
-  echo "Skipped docker compose start."
-  exit 0
-fi
-
-install_docker
-configure_docker_command
-
-echo
-start_stack
-
-echo
-echo "Deployment finished."
-echo "Proxy URL: https://$USERNAME:******@$DOMAIN"
-print_sing_box_config
-echo "Logs: docker compose logs -f"
+install_stack

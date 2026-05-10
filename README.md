@@ -17,21 +17,31 @@
 - 💻 [GitHub 地址](https://github.com/PixelCatICU)
 - 🐦 [X](https://x.com/PixelCatICU)
 
-# 🚀 NaiveProxy Docker 部署
+# 🚀 NaiveProxy 直装部署
 
-这个项目提供一个 Docker Compose 部署：默认从 GitHub Container Registry 拉取已构建镜像，容器内运行带 NaiveProxy 支持的 Caddy，启动后由 Caddy 自动申请和续期 HTTPS 证书。🔒
+这个项目提供 NaiveProxy 一键部署脚本：不依赖 Docker，直接在服务器上编译带 `forwardproxy` 插件的 Caddy，并通过 `systemd` 运行 NaiveProxy。Caddy 会自动申请和续期 HTTPS 证书。🔒
+
+## ✨ 功能
+
+- ⚡ 不用 Docker，直接安装到宿主机
+- 🔐 自动申请和续期 Let's Encrypt 证书
+- 🎭 支持反代伪装网站域名
+- 📱 部署完成后自动打印 sing-box 客户端配置
+- 🚀 菜单内置一键开启 BBR
+- 🧹 支持安装、更新、卸载和彻底清理
 
 ## ✅ 前置条件
 
 - 🌍 域名 `A/AAAA` 记录已经解析到这台服务器。
 - 🛡️ 服务器防火墙和云厂商安全组放行 `80/tcp` 和 `443/tcp`。
-- 🐳 Docker 和 Docker Compose 已安装。
+- 🧱 系统需要 Linux + systemd。
+- 📦 脚本会自动安装基础依赖、Go、xcaddy，并编译 Caddy。
 
 ## ⚡ 一键部署脚本
 
-### ⭐ 方式一：交互式部署（推荐）
+### ⭐ 方式一：交互式部署（推荐） ⭐
 
-> ✅ 推荐新手优先使用这个方式：复制一条命令运行，然后按菜单输入 `1` 安装即可。
+> ✅ 推荐新手优先使用这个方式：复制一条命令运行，然后按中文菜单输入 `1` 安装即可。
 
 在服务器执行：
 
@@ -52,36 +62,38 @@ chmod +x deploy.sh
 
 如果项目已经存在，它会自动进入 `/opt/pixelcat/pixelcat-naiveproxy` 拉取最新代码，然后启动 `deploy.sh` 菜单。
 
-脚本会显示菜单：
+脚本会显示中文菜单：
 
 ```text
-1) 安装 / 更新
-2) 卸载
+1) 安装 / 更新 NaiveProxy
+2) 卸载 NaiveProxy
+3) 一键开启 BBR
 0) 退出
 ```
 
-输入 `1` 后，按提示填写部署参数。
+输入 `1` 后，按中文提示填写部署参数：
 
-然后按提示输入：
+- `代理域名`：例如 `proxy.example.com`
+- `NaiveProxy 用户名`：客户端连接用的用户名
+- `NaiveProxy 密码`：客户端连接用的密码
+- `伪装网站域名`：例如 `www.example.com`
+- `证书邮箱`：Let's Encrypt 邮箱，可留空
+- `HTTP 端口`：默认 `80`
+- `HTTPS 端口`：默认 `443`
 
-- `DOMAIN`：代理域名，例如 `proxy.example.com`
-- `USERNAME`：NaiveProxy 用户名
-- `PASSWORD`：NaiveProxy 密码
-- `DECOY_DOMAIN`：伪装网站域名，例如 `www.example.com`
-- `EMAIL`：证书邮箱，可选
+部署完成后，脚本会打印：
 
-脚本会自动生成 `.env`，优先拉取 GHCR 镜像并启动服务；如果检测到 GHCR 镜像落后于当前项目代码，会自动切换为本地 Docker 构建后启动。
-
-如果服务器没有 Docker，脚本会提示自动安装 Docker Engine 和 Docker Compose 插件。
-
-Docker 自动安装优先支持 Ubuntu、Debian、CentOS、RHEL、Rocky Linux、AlmaLinux、Fedora 和 Alpine。部分云厂商定制系统可能需要先手动安装 Docker。
+- ✅ systemd 服务状态命令
+- 🔗 NaiveProxy 代理地址
+- 📱 sing-box 客户端配置
+- 📜 日志查看命令
 
 ### 方式二：带参数部署
 
 也可以一次性传入参数：
 
 ```bash
-./deploy.sh -y \
+./deploy.sh --install -y \
   --domain proxy.example.com \
   --username your_user \
   --password change_this_strong_password \
@@ -93,18 +105,52 @@ Docker 自动安装优先支持 Ubuntu、Debian、CentOS、RHEL、Rocky Linux、
 
 ### 方式三：只生成配置
 
-只生成 `.env`，不启动容器：
+只生成 `.env`、Caddyfile 和 systemd 配置，不启动服务：
 
 ```bash
-./deploy.sh --skip-start
+./deploy.sh --install --skip-start
 ```
 
-### 常用选项
+### 🚀 一键开启 BBR
 
-不希望脚本自动安装 Docker：
+交互菜单输入 `3`，或直接执行：
 
 ```bash
-./deploy.sh --no-install-docker
+./deploy.sh --bbr
+```
+
+脚本会写入 `/etc/sysctl.d/99-pixelcat-bbr.conf` 并执行 `sysctl --system`：
+
+```conf
+net.core.default_qdisc=fq
+net.ipv4.tcp_congestion_control=bbr
+```
+
+查看当前 BBR 状态：
+
+```bash
+sysctl net.ipv4.tcp_congestion_control
+sysctl net.core.default_qdisc
+```
+
+### 常用命令
+
+查看服务状态：
+
+```bash
+systemctl status pixelcat-naiveproxy --no-pager
+```
+
+查看日志：
+
+```bash
+journalctl -u pixelcat-naiveproxy -f
+```
+
+重启服务：
+
+```bash
+systemctl restart pixelcat-naiveproxy
 ```
 
 查看脚本帮助：
@@ -113,21 +159,15 @@ Docker 自动安装优先支持 Ubuntu、Debian、CentOS、RHEL、Rocky Linux、
 ./deploy.sh --help
 ```
 
-部署完成后查看日志：
+## 🧹 卸载服务
 
-```bash
-docker compose logs -f
-```
-
-### 卸载服务
-
-停止并删除 NaiveProxy 容器，保留证书和 Caddy 数据卷：
+停止并删除 NaiveProxy systemd 服务，保留配置和证书数据：
 
 ```bash
 ./deploy.sh --uninstall
 ```
 
-完全卸载，连证书数据卷和 `.env` 一起删除：
+完全卸载，连配置、证书数据、本地 Go 工具和 `.env` 一起删除：
 
 ```bash
 ./deploy.sh --uninstall --purge
@@ -138,102 +178,6 @@ docker compose logs -f
 ```bash
 ./deploy.sh --uninstall -y
 ```
-
-## 🛠️ 使用已发布镜像部署
-
-```bash
-# 进入当前项目目录
-cp .env.example .env
-```
-
-📝 编辑 `.env`：
-
-```env
-DOMAIN=proxy.example.com
-USERNAME=your_user
-PASSWORD=change_this_strong_password
-DECOY_DOMAIN=www.example.com
-EMAIL=admin@example.com
-```
-
-🚀 启动：
-
-```bash
-docker compose up -d
-```
-
-📜 查看日志：
-
-```bash
-docker compose logs -f
-```
-
-🛑 停止：
-
-```bash
-docker compose down
-```
-
-🧹 如果要连证书数据一起删除：
-
-```bash
-docker compose down -v
-```
-
-## 🐳 Dockge 部署
-
-Dockge 里推荐使用这个项目的 `docker-compose.yml`，它会直接拉取：
-
-```text
-ghcr.io/pixelcaticu/pixelcat-naiveproxy:latest
-```
-
-服务器准备：
-
-```bash
-cd /opt/stacks
-git clone git@github.com:PixelCatICU/pixelcat-naiveproxy.git
-cd pixelcat-naiveproxy
-cp .env.example .env
-```
-
-编辑 `.env` 后，在 Dockge 里启动 `pixelcat-naiveproxy` Stack。
-
-更新镜像：
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-也可以在 Dockge 面板里点更新镜像后重启 Stack。
-
-## 🏗️ 本地构建部署
-
-如果不想使用 GHCR 镜像，可以在服务器本地构建：
-
-```bash
-docker compose -f docker-compose.build.yml up -d --build
-```
-
-本地构建模式会使用当前目录的 [Dockerfile](./Dockerfile) 构建镜像。
-
-## 📦 镜像发布
-
-推送到 `main` 分支后，GitHub Actions 会自动构建并发布多架构镜像：
-
-```text
-ghcr.io/pixelcaticu/pixelcat-naiveproxy:latest
-```
-
-打版本标签也会发布对应版本镜像：
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-发布后如果 GHCR Package 默认是私有，需要在 GitHub 仓库的 Packages 设置里改成 Public，服务器才能免登录拉取镜像。
 
 ## 📱 NaiveProxy 客户端配置
 
@@ -249,21 +193,102 @@ https://USERNAME:PASSWORD@DOMAIN
 https://your_user:change_this_strong_password@proxy.example.com
 ```
 
-## ⚙️ 环境变量
+部署完成后脚本会自动打印 sing-box 配置。结构类似：
+
+```json
+{
+  "inbounds": [
+    {
+      "type": "mixed",
+      "tag": "mixed-in",
+      "listen": "127.0.0.1",
+      "listen_port": 2080
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "naive",
+      "tag": "naive-out",
+      "server": "proxy.example.com",
+      "server_port": 443,
+      "username": "your_user",
+      "password": "change_this_strong_password",
+      "tls": {
+        "enabled": true,
+        "server_name": "proxy.example.com"
+      }
+    }
+  ],
+  "route": {
+    "final": "naive-out",
+    "auto_detect_interface": true
+  }
+}
+```
+
+## ⚙️ 配置项
 
 | 变量 | 必填 | 说明 |
 | --- | --- | --- |
 | `DOMAIN` | 是 | 用于申请证书和访问代理的域名 |
 | `USERNAME` | 是 | NaiveProxy Basic Auth 用户名 |
 | `PASSWORD` | 是 | NaiveProxy Basic Auth 密码 |
-| `DECOY_DOMAIN` | 是 | 反代伪装网站域名，普通浏览器访问 `DOMAIN` 时会显示该网站 |
+| `DECOY_DOMAIN` | 是 | 反代伪装网站域名，普通浏览器访问 `DOMAIN` 时会跳转或反代到该网站 |
 | `EMAIL` | 否 | Let's Encrypt 账号邮箱 |
-| `HTTP_PORT` | 否 | 宿主机 HTTP 端口，默认 `80` |
-| `HTTPS_PORT` | 否 | 宿主机 HTTPS 端口，默认 `443` |
+| `HTTP_PORT` | 否 | HTTP 端口，默认 `80` |
+| `HTTPS_PORT` | 否 | HTTPS/NaiveProxy 端口，默认 `443` |
+
+脚本会把配置保存到当前项目的 `.env`，并把 Caddyfile 写入：
+
+```text
+/etc/pixelcat-naiveproxy/Caddyfile
+```
+
+证书和 Caddy 数据默认保存到：
+
+```text
+/var/lib/pixelcat-naiveproxy
+```
 
 ## ⚠️ 注意
 
-- 🌍 首次启动需要公网访问到 `DOMAIN:80` 或 `DOMAIN:443`，否则证书申请会失败。
+- 🌍 首次启动需要公网访问到 `DOMAIN:80` 和 `DOMAIN:443`，否则证书申请可能失败。
 - 🎭 `DECOY_DOMAIN` 只填写域名，不要带 `https://`，例如 `www.example.com`。
-- 💾 `caddy_data` 卷保存证书和 ACME 账号信息，不要随意删除。
-- ☁️ 如果域名套了 CDN，需要确认 CDN 支持 HTTPS 代理流量，否则建议 DNS 记录先仅 DNS 解析，不启用代理。
+- 💾 `/var/lib/pixelcat-naiveproxy` 保存证书和 ACME 账号信息，不要随意删除。
+- ☁️ 如果域名套了 CDN，需要确认 CDN 支持 NaiveProxy 所需的 HTTPS 代理流量，否则建议 DNS 记录先仅 DNS 解析，不启用代理。
+
+## 🐳 Docker 镜像部署（可选）
+
+这个项目仍保留 Dockerfile 和 compose 文件，适合需要容器化的用户。当前推荐方式是上面的直装脚本。
+
+```bash
+cp .env.example .env
+docker compose up -d
+```
+
+查看日志：
+
+```bash
+docker compose logs -f
+```
+
+停止：
+
+```bash
+docker compose down
+```
+
+## 📦 镜像发布（可选）
+
+推送到 `main` 分支后，GitHub Actions 会自动构建并发布多架构镜像：
+
+```text
+ghcr.io/pixelcaticu/pixelcat-naiveproxy:latest
+```
+
+打版本标签也会发布对应版本镜像：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```

@@ -12,14 +12,14 @@ run_as_root() {
   elif command -v sudo >/dev/null 2>&1; then
     sudo "$@"
   else
-    echo "This script needs root privileges to create $BASE_DIR, but sudo is not installed." >&2
+    echo "脚本需要 root 权限创建 $BASE_DIR，但系统没有 sudo。请使用 root 运行。" >&2
     exit 1
   fi
 }
 
 need_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
-    echo "Missing command: $1" >&2
+    echo "缺少命令: $1" >&2
     exit 1
   fi
 }
@@ -37,17 +37,17 @@ fi
 cd "$BASE_DIR"
 
 if [ -d "$APP_DIR/.git" ]; then
-  echo "Updating $APP_DIR..."
+  echo "正在更新 $APP_DIR..."
   git -C "$APP_DIR" fetch origin "$BRANCH"
   git -C "$APP_DIR" checkout "$BRANCH"
   git -C "$APP_DIR" pull --ff-only origin "$BRANCH"
 else
   if [ -e "$APP_DIR" ]; then
-    echo "$BASE_DIR/$APP_DIR already exists, but it is not a Git repository." >&2
+    echo "$BASE_DIR/$APP_DIR 已存在，但不是 Git 仓库。" >&2
     exit 1
   fi
 
-  echo "Cloning $REPO_URL..."
+  echo "正在克隆 $REPO_URL..."
   git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
 fi
 
