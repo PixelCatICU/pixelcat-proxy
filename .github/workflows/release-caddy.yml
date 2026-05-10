@@ -1,4 +1,4 @@
-name: Build Caddy NaiveProxy
+name: Build Caddy ForwardProxy
 
 on:
   workflow_dispatch:
@@ -41,27 +41,27 @@ jobs:
           GOARCH: ${{ matrix.arch }}
         run: |
           "$(go env GOPATH)/bin/xcaddy" build \
-            --output caddy-naiveproxy \
+            --output caddy-forwardproxy \
             --with github.com/caddyserver/forwardproxy
 
       - name: Package
         run: |
-          asset="caddy-naiveproxy-linux-${{ matrix.arch }}.tar.gz"
-          tar -czf "$asset" caddy-naiveproxy
+          asset="caddy-forwardproxy-linux-${{ matrix.arch }}.tar.gz"
+          tar -czf "$asset" caddy-forwardproxy
           sha256sum "$asset" > "$asset.sha256"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: caddy-naiveproxy-linux-${{ matrix.arch }}
+          name: caddy-forwardproxy-linux-${{ matrix.arch }}
           path: |
-            caddy-naiveproxy-linux-${{ matrix.arch }}.tar.gz
-            caddy-naiveproxy-linux-${{ matrix.arch }}.tar.gz.sha256
+            caddy-forwardproxy-linux-${{ matrix.arch }}.tar.gz
+            caddy-forwardproxy-linux-${{ matrix.arch }}.tar.gz.sha256
 
       - name: Upload release assets
         if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            caddy-naiveproxy-linux-${{ matrix.arch }}.tar.gz
-            caddy-naiveproxy-linux-${{ matrix.arch }}.tar.gz.sha256
+            caddy-forwardproxy-linux-${{ matrix.arch }}.tar.gz
+            caddy-forwardproxy-linux-${{ matrix.arch }}.tar.gz.sha256

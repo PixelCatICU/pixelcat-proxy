@@ -17,9 +17,9 @@
 - 💻 [GitHub 地址](https://github.com/PixelCatICU)
 - 🐦 [X](https://x.com/PixelCatICU)
 
-# 🚀 NaiveProxy 直装部署
+# 🚀 PixelCat ForwardProxy 直装部署
 
-这个项目提供 NaiveProxy 一键部署脚本：优先下载已经编译好的 Caddy，失败时再本地编译带 `forwardproxy` 插件的 Caddy，并通过 `systemd` 运行 NaiveProxy。Caddy 会自动申请和续期 HTTPS 证书。🔒
+这个项目提供 PixelCat ForwardProxy 一键部署脚本：优先下载已经编译好的 Caddy，失败时再本地编译带 `forwardproxy` 插件的 Caddy，并通过 `systemd` 运行代理服务。Caddy 会自动申请和续期 HTTPS 证书。🔒
 
 ## ✨ 功能
 
@@ -54,19 +54,19 @@ curl -fsSL https://raw.githubusercontent.com/PixelCatICU/pixelcat-naiveproxy/mai
 ```bash
 mkdir -p /opt/pixelcat
 cd /opt/pixelcat
-git clone https://github.com/PixelCatICU/pixelcat-naiveproxy.git
-cd pixelcat-naiveproxy
+git clone https://github.com/PixelCatICU/pixelcat-naiveproxy.git pixelcat-forwardproxy
+cd pixelcat-forwardproxy
 chmod +x deploy.sh
 ./deploy.sh
 ```
 
-如果项目已经存在，它会自动进入 `/opt/pixelcat/pixelcat-naiveproxy` 拉取最新代码，然后启动 `deploy.sh` 菜单。
+如果项目已经存在，它会自动进入 `/opt/pixelcat/pixelcat-forwardproxy` 拉取最新代码，然后启动 `deploy.sh` 菜单。
 
 脚本会显示中文菜单：
 
 ```text
-1) 安装 / 更新 NaiveProxy
-2) 卸载 NaiveProxy
+1) 安装 / 更新 PixelCat ForwardProxy
+2) 卸载 PixelCat ForwardProxy
 3) 一键开启 BBR
 0) 退出
 ```
@@ -74,8 +74,8 @@ chmod +x deploy.sh
 输入 `1` 后，按中文提示填写部署参数：
 
 - `代理域名`：例如 `proxy.example.com`
-- `NaiveProxy 用户名`：客户端连接用的用户名
-- `NaiveProxy 密码`：客户端连接用的密码
+- `代理用户名`：客户端连接用的用户名
+- `代理密码`：客户端连接用的密码
 - `伪装网站域名`：例如 `www.example.com`
 - `证书邮箱`：Let's Encrypt 邮箱，可留空
 - `HTTP 端口`：默认 `80`
@@ -84,15 +84,15 @@ chmod +x deploy.sh
 部署完成后，脚本会打印：
 
 - ✅ systemd 服务状态命令
-- 🔗 NaiveProxy 代理地址
+- 🔗 代理地址
 - 📱 sing-box 客户端配置
 - 📜 日志查看命令
 
 脚本默认会优先下载 GitHub Release 中的预编译文件：
 
 ```text
-caddy-naiveproxy-linux-amd64.tar.gz
-caddy-naiveproxy-linux-arm64.tar.gz
+caddy-forwardproxy-linux-amd64.tar.gz
+caddy-forwardproxy-linux-arm64.tar.gz
 ```
 
 如果 Release 还没发布、下载失败，或者服务器架构不支持，脚本会自动切换为本地编译。
@@ -153,19 +153,19 @@ sysctl net.core.default_qdisc
 查看服务状态：
 
 ```bash
-systemctl status pixelcat-naiveproxy --no-pager
+systemctl status pixelcat-forwardproxy --no-pager
 ```
 
 查看日志：
 
 ```bash
-journalctl -u pixelcat-naiveproxy -f
+journalctl -u pixelcat-forwardproxy -f
 ```
 
 重启服务：
 
 ```bash
-systemctl restart pixelcat-naiveproxy
+systemctl restart pixelcat-forwardproxy
 ```
 
 查看脚本帮助：
@@ -176,7 +176,7 @@ systemctl restart pixelcat-naiveproxy
 
 ## 🧹 卸载服务
 
-停止并删除 NaiveProxy systemd 服务，保留配置和证书数据：
+停止并删除 PixelCat ForwardProxy systemd 服务，保留配置和证书数据：
 
 ```bash
 ./deploy.sh --uninstall
@@ -194,7 +194,7 @@ systemctl restart pixelcat-naiveproxy
 ./deploy.sh --uninstall -y
 ```
 
-## 📱 NaiveProxy 客户端配置
+## 📱 sing-box 客户端配置
 
 客户端代理地址通常填写：
 
@@ -246,23 +246,23 @@ https://your_user:change_this_strong_password@proxy.example.com
 | 变量 | 必填 | 说明 |
 | --- | --- | --- |
 | `DOMAIN` | 是 | 用于申请证书和访问代理的域名 |
-| `USERNAME` | 是 | NaiveProxy Basic Auth 用户名 |
-| `PASSWORD` | 是 | NaiveProxy Basic Auth 密码 |
+| `USERNAME` | 是 | Basic Auth 用户名 |
+| `PASSWORD` | 是 | Basic Auth 密码 |
 | `DECOY_DOMAIN` | 是 | 反代伪装网站域名，普通浏览器访问 `DOMAIN` 时会反代显示该网站 |
 | `EMAIL` | 否 | Let's Encrypt 账号邮箱 |
 | `HTTP_PORT` | 否 | HTTP 端口，默认 `80` |
-| `HTTPS_PORT` | 否 | HTTPS/NaiveProxy 端口，默认 `443` |
+| `HTTPS_PORT` | 否 | HTTPS 代理端口，默认 `443` |
 
 脚本会把配置保存到当前项目的 `.env`，并把 Caddyfile 写入：
 
 ```text
-/etc/pixelcat-naiveproxy/Caddyfile
+/etc/pixelcat-forwardproxy/Caddyfile
 ```
 
 证书和 Caddy 数据默认保存到：
 
 ```text
-/var/lib/pixelcat-naiveproxy
+/var/lib/pixelcat-forwardproxy
 ```
 
 ## ⚠️ 注意
@@ -270,16 +270,16 @@ https://your_user:change_this_strong_password@proxy.example.com
 - 🌍 首次启动需要公网访问到 `DOMAIN:80` 和 `DOMAIN:443`，否则证书申请可能失败。
 - 🎭 `DECOY_DOMAIN` 只填写域名，不要带 `https://`，例如 `www.example.com`。
 - 🧩 复杂网站可能因为 Cookie、CSP、WebSocket 或静态资源跨域限制导致反代显示不完整，静态博客、文档站、简单官网更适合做伪装站。
-- 💾 `/var/lib/pixelcat-naiveproxy` 保存证书和 ACME 账号信息，不要随意删除。
-- ☁️ 如果域名套了 CDN，需要确认 CDN 支持 NaiveProxy 所需的 HTTPS 代理流量，否则建议 DNS 记录先仅 DNS 解析，不启用代理。
+- 💾 `/var/lib/pixelcat-forwardproxy` 保存证书和 ACME 账号信息，不要随意删除。
+- ☁️ 如果域名套了 CDN，需要确认 CDN 支持 HTTPS 代理流量，否则建议 DNS 记录先仅 DNS 解析，不启用代理。
 
 ## 📦 发布预编译 Caddy
 
 这个项目内置 GitHub Actions，会在发布 GitHub Release 时自动编译：
 
 ```text
-caddy-naiveproxy-linux-amd64.tar.gz
-caddy-naiveproxy-linux-arm64.tar.gz
+caddy-forwardproxy-linux-amd64.tar.gz
+caddy-forwardproxy-linux-arm64.tar.gz
 ```
 
 发布方式：
@@ -291,4 +291,4 @@ git push origin v1.0.0
 
 然后在 GitHub 仓库页面创建 Release，选择这个 tag 并发布。发布后 Actions 会自动把二进制文件上传到 Release Assets。
 
-也可以在 GitHub Actions 页面手动运行 `Build Caddy NaiveProxy`，先检查构建是否正常。
+也可以在 GitHub Actions 页面手动运行 `Build Caddy ForwardProxy`，先检查构建是否正常。

@@ -13,10 +13,16 @@ SKIP_START="false"
 PASSWORD_FROM_ARG="false"
 ACTION="menu"
 PURGE="false"
-INSTALL_DIR="/etc/pixelcat-naiveproxy"
-DATA_DIR="/var/lib/pixelcat-naiveproxy"
-CADDY_BIN="/usr/local/bin/caddy-naiveproxy"
-SERVICE_FILE="/etc/systemd/system/pixelcat-naiveproxy.service"
+SERVICE_NAME="pixelcat-forwardproxy"
+LEGACY_SERVICE_NAME="pixelcat-naiveproxy"
+INSTALL_DIR="/etc/pixelcat-forwardproxy"
+DATA_DIR="/var/lib/pixelcat-forwardproxy"
+LEGACY_INSTALL_DIR="/etc/pixelcat-naiveproxy"
+LEGACY_DATA_DIR="/var/lib/pixelcat-naiveproxy"
+CADDY_BIN="/usr/local/bin/caddy-forwardproxy"
+LEGACY_CADDY_BIN="/usr/local/bin/caddy-naiveproxy"
+SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+LEGACY_SERVICE_FILE="/etc/systemd/system/${LEGACY_SERVICE_NAME}.service"
 GO_ROOT="/usr/local/go-pixelcat"
 GO_BIN=""
 XCADDY_BIN="/usr/local/bin/xcaddy"
@@ -25,25 +31,25 @@ BUILD_FROM_SOURCE="false"
 
 usage() {
   cat <<'USAGE'
-PixelCat NaiveProxy 一键脚本
+PixelCat ForwardProxy 一键脚本
 
 用法:
   ./deploy.sh                 显示中文菜单
-  ./deploy.sh --install       安装或更新 NaiveProxy
-  ./deploy.sh --uninstall     卸载 NaiveProxy
+  ./deploy.sh --install       安装或更新 PixelCat ForwardProxy
+  ./deploy.sh --uninstall     卸载 PixelCat ForwardProxy
   ./deploy.sh --bbr           一键开启 BBR
   ./deploy.sh --domain proxy.example.com --username user --password pass --decoy-domain www.example.com --email admin@example.com
 
 选项:
-      --install         安装或更新 NaiveProxy
-      --uninstall       停止并删除 NaiveProxy systemd 服务
+      --install         安装或更新 PixelCat ForwardProxy
+      --uninstall       停止并删除 PixelCat ForwardProxy systemd 服务
       --purge           配合 --uninstall 使用，同时删除配置和证书数据
       --bbr             一键开启 BBR
       --build-from-source
                         跳过预编译文件下载，直接本地编译 Caddy
   -d, --domain          代理域名，必填
-  -u, --username        NaiveProxy 用户名，必填
-  -p, --password        NaiveProxy 密码，必填
+  -u, --username        代理用户名，必填
+  -p, --password        代理密码，必填
       --decoy-domain    伪装网站域名，必填
   -e, --email           Let's Encrypt 证书邮箱，可选
       --http-port       宿主机 HTTP 端口，默认 80
@@ -355,12 +361,12 @@ download_prebuilt_caddy() {
   fi
 
   arch="$(linux_arch)" || return 1
-  asset="caddy-naiveproxy-linux-${arch}.tar.gz"
+  asset="caddy-forwardproxy-linux-${arch}.tar.gz"
   checksum_url="${RELEASE_BASE_URL}/${asset}.sha256"
   tmp_dir="$(mktemp -d)"
   archive="$tmp_dir/$asset"
   checksum_file="$tmp_dir/$asset.sha256"
-  tmp_bin="$tmp_dir/caddy-naiveproxy"
+  tmp_bin="$tmp_dir/caddy-forwardproxy"
 
   echo
   echo "正在下载预编译 Caddy：$asset"
@@ -455,10 +461,32 @@ build_caddy() {
   rm -f "$tmp_bin"
 
   echo
-  echo "正在编译带 NaiveProxy 支持的 Caddy..."
+  echo "正在编译带 forwardproxy 插件的 Caddy..."
   env XCADDY_WHICH_GO="$GO_BIN" "$XCADDY_BIN" build --output "$tmp_bin" --with github.com/caddyserver/forwardproxy
   run_as_root install -m 0755 "$tmp_bin" "$CADDY_BIN"
   rm -f "$tmp_bin"
+}
+
+migrate_legacy_install() {
+  if systemctl list-unit-files "${LEGACY_SERVICE_NAME}.service" >/dev/null 2>&1 || [ -f "$LEGACY_SERVICE_FILE" ]; then
+    echo
+    echo "检测到旧服务 ${LEGACY_SERVICE_NAME}，正在迁移到 ${SERVICE_NAME}..."
+    run_as_root systemctl disable --now "$LEGACY_SERVICE_NAME" >/dev/null 2>&1 || true
+    run_as_root rm -f "$LEGACY_SERVICE_FILE"
+    run_as_root systemctl daemon-reload
+  fi
+
+  if [ ! -e "$INSTALL_DIR" ] && [ -e "$LEGACY_INSTALL_DIR" ]; then
+    run_as_root mv "$LEGACY_INSTALL_DIR" "$INSTALL_DIR"
+  fi
+
+  if [ ! -e "$DATA_DIR" ] && [ -e "$LEGACY_DATA_DIR" ]; then
+    run_as_root mv "$LEGACY_DATA_DIR" "$DATA_DIR"
+  fi
+
+  if [ -e "$LEGACY_CADDY_BIN" ]; then
+    run_as_root rm -f "$LEGACY_CADDY_BIN"
+  fi
 }
 
 write_caddyfile() {
@@ -505,7 +533,7 @@ write_caddyfile() {
 write_service() {
   cat <<EOF | run_as_root tee "$SERVICE_FILE" >/dev/null
 [Unit]
-Description=PixelCat NaiveProxy
+Description=PixelCat ForwardProxy
 Documentation=https://github.com/PixelCatICU/pixelcat-naiveproxy
 After=network-online.target
 Wants=network-online.target
@@ -587,6 +615,7 @@ EOF
 install_stack() {
   need_linux
   need_systemd
+  migrate_legacy_install
   install_base_packages
   if ! download_prebuilt_caddy; then
     select_or_install_go
@@ -602,21 +631,21 @@ install_stack() {
   fi
 
   echo
-  echo "正在启动 NaiveProxy systemd 服务..."
+  echo "正在启动 PixelCat ForwardProxy systemd 服务..."
   run_as_root systemctl daemon-reload
-  run_as_root systemctl enable pixelcat-naiveproxy >/dev/null
-  if systemctl is-active --quiet pixelcat-naiveproxy; then
-    run_as_root systemctl restart pixelcat-naiveproxy
+  run_as_root systemctl enable "$SERVICE_NAME" >/dev/null
+  if systemctl is-active --quiet "$SERVICE_NAME"; then
+    run_as_root systemctl restart "$SERVICE_NAME"
   else
-    run_as_root systemctl start pixelcat-naiveproxy
+    run_as_root systemctl start "$SERVICE_NAME"
   fi
 
   echo
   echo "部署完成。"
-  echo "服务状态: systemctl status pixelcat-naiveproxy --no-pager"
+  echo "服务状态: systemctl status $SERVICE_NAME --no-pager"
   echo "代理地址: https://$USERNAME:******@$DOMAIN"
   print_sing_box_config
-  echo "查看日志: journalctl -u pixelcat-naiveproxy -f"
+  echo "查看日志: journalctl -u $SERVICE_NAME -f"
 }
 
 uninstall_stack() {
@@ -625,9 +654,9 @@ uninstall_stack() {
 
   if [ "$ASSUME_YES" != "true" ]; then
     if [ "$PURGE" = "true" ]; then
-      read -r -p "确认卸载 NaiveProxy，并删除配置、证书数据和本地 Go 工具？[y/N]: " uninstall_confirm
+      read -r -p "确认卸载 PixelCat ForwardProxy，并删除配置、证书数据和本地 Go 工具？[y/N]: " uninstall_confirm
     else
-      read -r -p "确认卸载 NaiveProxy 服务？配置和证书数据会保留。[y/N]: " uninstall_confirm
+      read -r -p "确认卸载 PixelCat ForwardProxy 服务？配置和证书数据会保留。[y/N]: " uninstall_confirm
     fi
     case "$uninstall_confirm" in
       y|Y|yes|YES)
@@ -641,13 +670,14 @@ uninstall_stack() {
 
   echo
   echo "正在停止并删除 systemd 服务..."
-  run_as_root systemctl disable --now pixelcat-naiveproxy >/dev/null 2>&1 || true
-  run_as_root rm -f "$SERVICE_FILE"
+  run_as_root systemctl disable --now "$SERVICE_NAME" >/dev/null 2>&1 || true
+  run_as_root systemctl disable --now "$LEGACY_SERVICE_NAME" >/dev/null 2>&1 || true
+  run_as_root rm -f "$SERVICE_FILE" "$LEGACY_SERVICE_FILE"
   run_as_root systemctl daemon-reload
-  run_as_root rm -f "$CADDY_BIN"
+  run_as_root rm -f "$CADDY_BIN" "$LEGACY_CADDY_BIN"
 
   if [ "$PURGE" = "true" ]; then
-    run_as_root rm -rf "$INSTALL_DIR" "$DATA_DIR" "$GO_ROOT"
+    run_as_root rm -rf "$INSTALL_DIR" "$DATA_DIR" "$LEGACY_INSTALL_DIR" "$LEGACY_DATA_DIR" "$GO_ROOT"
     run_as_root rm -f "$XCADDY_BIN"
     if [ -f ".env" ]; then
       rm -f .env
@@ -687,7 +717,7 @@ show_menu() {
   while true; do
     cat <<'MENU'
 
-PixelCat NaiveProxy 一键脚本
+PixelCat ForwardProxy 一键脚本
 
 像素猫 - 科学上网ICU
 中文教程博客，整理科学上网、网络诊断、节点维护与隐私安全的实用经验。
@@ -697,8 +727,8 @@ YouTube: https://www.youtube.com/@PixelCatICU
 GitHub: https://github.com/PixelCatICU
 X: https://x.com/PixelCatICU
 
-1) 安装 / 更新 NaiveProxy
-2) 卸载 NaiveProxy
+1) 安装 / 更新 PixelCat ForwardProxy
+2) 卸载 PixelCat ForwardProxy
 3) 一键开启 BBR
 0) 退出
 
@@ -751,8 +781,8 @@ if [ "$ACTION" = "bbr" ]; then
 fi
 
 DOMAIN="$(strip_scheme "$(prompt_value DOMAIN "请输入代理域名，例如 proxy.example.com" "$DOMAIN")")"
-USERNAME="$(prompt_value USERNAME "请输入 NaiveProxy 用户名" "$USERNAME")"
-PASSWORD="$(prompt_value PASSWORD "请输入 NaiveProxy 密码" "$PASSWORD" true)"
+USERNAME="$(prompt_value USERNAME "请输入代理用户名" "$USERNAME")"
+PASSWORD="$(prompt_value PASSWORD "请输入代理密码" "$PASSWORD" true)"
 DECOY_DOMAIN="$(strip_scheme "$(prompt_value DECOY_DOMAIN "请输入伪装网站域名，例如 www.example.com" "$DECOY_DOMAIN")")"
 EMAIL="$(prompt_optional "请输入证书邮箱" "$EMAIL")"
 HTTP_PORT="$(prompt_optional "请输入 HTTP 端口" "$HTTP_PORT" "80")"
