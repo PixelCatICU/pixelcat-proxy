@@ -521,6 +521,8 @@ ExecStart=$CADDY_BIN run --config $INSTALL_DIR/Caddyfile --adapter caddyfile
 ExecReload=$CADDY_BIN reload --config $INSTALL_DIR/Caddyfile --adapter caddyfile --force
 Restart=on-failure
 RestartSec=5s
+TimeoutStartSec=60
+TimeoutStopSec=20
 LimitNOFILE=1048576
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
@@ -602,7 +604,12 @@ install_stack() {
   echo
   echo "正在启动 NaiveProxy systemd 服务..."
   run_as_root systemctl daemon-reload
-  run_as_root systemctl enable --now pixelcat-naiveproxy
+  run_as_root systemctl enable pixelcat-naiveproxy >/dev/null
+  if systemctl is-active --quiet pixelcat-naiveproxy; then
+    run_as_root systemctl restart pixelcat-naiveproxy
+  else
+    run_as_root systemctl start pixelcat-naiveproxy
+  fi
 
   echo
   echo "部署完成。"
