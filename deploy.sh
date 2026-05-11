@@ -1159,7 +1159,7 @@ install_hop_packages() {
 }
 
 download_hysteria2() {
-  local arch asset asset_url checksum_url tmp_dir bin_file checksum_file expected actual
+  local arch asset asset_url hashes_url tmp_dir bin_file hashes_file expected actual
 
   if ! command -v sha256sum >/dev/null 2>&1; then
     echo "缺少 sha256sum,无法校验 Hysteria2 二进制。" >&2
@@ -1169,10 +1169,10 @@ download_hysteria2() {
   arch="$(linux_arch)" || return 1
   asset="hysteria-linux-${arch}"
   asset_url="${HY2_RELEASE_BASE_URL}/${asset}"
-  checksum_url="${asset_url}.sha256sum"
+  hashes_url="${HY2_RELEASE_BASE_URL}/hashes.txt"
   tmp_dir="$(mktemp -d)"
   bin_file="$tmp_dir/hysteria"
-  checksum_file="$tmp_dir/hysteria.sha256sum"
+  hashes_file="$tmp_dir/hashes.txt"
 
   echo
   echo "正在下载 Hysteria2:$asset"
@@ -1182,16 +1182,23 @@ download_hysteria2() {
     return 1
   fi
 
-  if ! curl -fsSL "$checksum_url" -o "$checksum_file"; then
-    echo "Hysteria2 校验和文件下载失败,拒绝安装未经校验的二进制。" >&2
+  if ! curl -fsSL "$hashes_url" -o "$hashes_file"; then
+    echo "Hysteria2 hashes.txt 下载失败,拒绝安装未经校验的二进制。" >&2
     rm -rf "$tmp_dir"
     return 1
   fi
 
-  expected="$(awk '{print $1}' "$checksum_file" | head -n1)"
+  # hashes.txt 行格式:<sha256>  build/<asset>
+  expected="$(awk -v t="build/$asset" '$2 == t {print $1; exit}' "$hashes_file")"
+  if [ -z "$expected" ]; then
+    echo "Hysteria2 hashes.txt 中没有 $asset 的校验和。" >&2
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
   actual="$(sha256sum "$bin_file" | awk '{print $1}')"
-  if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
-    echo "Hysteria2 校验和不匹配。" >&2
+  if [ "$expected" != "$actual" ]; then
+    echo "Hysteria2 校验和不匹配(expected $expected, got $actual)。" >&2
     rm -rf "$tmp_dir"
     return 1
   fi
