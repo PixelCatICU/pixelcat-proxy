@@ -773,6 +773,9 @@ write_caddyfile() {
     echo "	order forward_proxy before reverse_proxy"
     echo "	http_port $HTTP_PORT"
     echo "	https_port $HTTPS_PORT"
+    echo "	servers {"
+    echo "		protocols h1 h2"
+    echo "	}"
     if [ -n "$EMAIL" ]; then
       echo "	email $EMAIL"
     fi
