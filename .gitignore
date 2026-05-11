@@ -1,4 +1,5 @@
 .env
+.env.hysteria2
 caddy_data/
 caddy_config/
 .DS_Store
