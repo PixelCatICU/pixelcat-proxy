@@ -19,15 +19,41 @@ run_as_root() {
   fi
 }
 
-need_command() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    echo "缺少命令: $1" >&2
+ensure_tools() {
+  local missing=()
+  for cmd in "$@"; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      missing+=("$cmd")
+    fi
+  done
+  if [ ${#missing[@]} -eq 0 ]; then
+    return
+  fi
+
+  echo "缺少 ${missing[*]},正在尝试自动安装..."
+  if command -v apt-get >/dev/null 2>&1; then
+    run_as_root apt-get update >/dev/null
+    run_as_root apt-get install -y "${missing[@]}"
+  elif command -v dnf >/dev/null 2>&1; then
+    run_as_root dnf install -y "${missing[@]}"
+  elif command -v yum >/dev/null 2>&1; then
+    run_as_root yum install -y "${missing[@]}"
+  elif command -v apk >/dev/null 2>&1; then
+    run_as_root apk add --no-cache "${missing[@]}"
+  else
+    echo "无法识别包管理器,请手动安装:${missing[*]}" >&2
     exit 1
   fi
+
+  for cmd in "${missing[@]}"; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      echo "$cmd 安装失败。" >&2
+      exit 1
+    fi
+  done
 }
 
-need_command curl
-need_command tar
+ensure_tools curl tar
 
 if ! mkdir -p "$BASE_DIR" 2>/dev/null; then
   run_as_root mkdir -p "$BASE_DIR"
