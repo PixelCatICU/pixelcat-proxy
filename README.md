@@ -21,6 +21,29 @@
 - 💻 [GitHub 地址](https://github.com/PixelCatICU)
 - 🐦 [X](https://x.com/PixelCatICU)
 
+# 🎁 项目能做什么
+
+这是一份 **Linux 一键部署脚本**,同时支持以下两种代理协议,两者可以独立部署、也可以在同一台服务器同一个域名共存:
+
+| 协议 | 传输层 | 端口 | 特点 |
+| --- | --- | --- | --- |
+| **ForwardProxy**(NaiveProxy 兼容) | HTTPS / TCP | 443/tcp | Caddy + `forwardproxy` 插件,反代真实网站做伪装 |
+| **Hysteria2** | QUIC / UDP | 443/udp + 端口跳跃 | 内核层 UDP 端口跳跃(nftables/iptables),抗 QoS、抗封锁 |
+
+共通能力:
+
+- 🔐 自动申请和续期 Let's Encrypt 证书,同域名时两个协议共享证书
+- 👤 systemd 以专用 `pixelcat-proxy` 用户 + `CAP_NET_BIND_SERVICE` 运行,不裸跑 root
+- 🛡 systemd sandbox:`ProtectSystem=strict` / `ProtectHome` / `PrivateTmp` / `RestrictNamespaces` / `LockPersonality` 等
+- 📁 `.env` / `.env.hysteria2` / 配置文件 0600/0640 权限,密码不全局可读
+- ⚡ 预编译二进制下载,**强制 SHA256 校验**,任一步骤校验失败拒绝使用并回退到本地编译
+- 🦘 输入实时校验(域名 / 用户名 / 端口 / 邮箱 / 端口跳跃范围 / 限速),错误立刻重输,不必重跑脚本
+- 📱 部署完成自动打印对应协议的 sing-box 客户端配置(Hysteria2 自带 `server_ports` 跳跃字段)
+- 🚀 菜单内置一键 BBR
+- 🧹 安装 / 更新 / 卸载 / 彻底清理(`--purge`)
+
+启动脚本会显示像素猫 ASCII logo + 中文菜单,5 个选项覆盖以上全部能力。
+
 # 🚀 PixelCat ForwardProxy 直装部署
 
 这个项目提供 PixelCat ForwardProxy 一键部署脚本:优先下载带 `forwardproxy` 插件的预编译 Caddy(并强制校验 SHA256),失败或不可用时再本地编译,然后通过 `systemd` 以专用低权限用户运行。Caddy 会自动申请和续期 HTTPS 证书。🔒
@@ -333,8 +356,22 @@ systemd 服务以专用用户 `pixelcat-proxy` 运行,通过 `AmbientCapabilitie
   --hy2-port 443 \
   --hy2-hop-range 20000-50000 \
   --hy2-up-mbps 0 \
-  --hy2-down-mbps 0
+  --hy2-down-mbps 0 \
+  --hy2-masquerade https://www.bing.com
 ```
+
+完整 CLI 参数:
+
+| 参数 | 默认 | 说明 |
+| --- | --- | --- |
+| `--hy2-domain` | 沿用 `--domain` | TLS SNI 域名 |
+| `--hy2-password` | 自动生成 32 位强密码 | 客户端密码 |
+| `--hy2-port` | `443` | UDP 监听端口 |
+| `--hy2-hop-range` | `20000-50000` | 端口跳跃范围,传 `off` 关闭 |
+| `--hy2-hop-iface` | 自动检测默认路由网卡 | DNAT 网卡(`ip route show default` 解析) |
+| `--hy2-up-mbps` | `0`(不限速) | 上行限速 Mbps |
+| `--hy2-down-mbps` | `0`(不限速) | 下行限速 Mbps |
+| `--hy2-masquerade` | `https://www.bing.com` | 伪装站点 URL |
 
 不传 `--hy2-password` 会自动生成强密码(并打印到终端)。
 
@@ -350,6 +387,24 @@ systemd 服务以专用用户 `pixelcat-proxy` 运行,通过 `AmbientCapabilitie
 ./deploy.sh --install-hysteria2 --skip-start
 ```
 
+### Hysteria2 常用命令
+
+```bash
+# 服务状态
+systemctl status pixelcat-hysteria2 --no-pager
+systemctl status pixelcat-hysteria2-hop --no-pager   # 端口跳跃 oneshot
+
+# 实时日志
+journalctl -u pixelcat-hysteria2 -f
+
+# 重启
+systemctl restart pixelcat-hysteria2
+
+# 查看当前生效的跳跃规则
+nft list table inet pixelcat-hy 2>/dev/null || \
+  iptables -t nat -L PREROUTING -n
+```
+
 ## 🧹 卸载 Hysteria2
 
 保留配置和证书:
@@ -363,6 +418,27 @@ systemd 服务以专用用户 `pixelcat-proxy` 运行,通过 `AmbientCapabilitie
 ```bash
 ./deploy.sh --uninstall-hysteria2 --purge
 ```
+
+免确认卸载:
+
+```bash
+./deploy.sh --uninstall-hysteria2 -y
+```
+
+## ⚙️ Hysteria2 配置项
+
+| 变量 | 必填 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `HY2_DOMAIN` | 是 | 沿用 `DOMAIN` | TLS SNI 域名 |
+| `HY2_PASSWORD` | 是 | 自动生成 | 客户端密码 |
+| `HY2_PORT` | 否 | `443` | UDP 监听端口 |
+| `HY2_HOP_RANGE` | 否 | `20000-50000` | 端口跳跃范围,留空或 `off` 关闭 |
+| `HY2_HOP_IFACE` | 否 | 自动检测 | DNAT 使用的网卡 |
+| `HY2_UP_MBPS` | 否 | `0` | 上行限速 Mbps,`0` = 不限速 |
+| `HY2_DOWN_MBPS` | 否 | `0` | 下行限速 Mbps,`0` = 不限速 |
+| `HY2_MASQUERADE_URL` | 否 | `https://www.bing.com` | 伪装站点 URL |
+
+配置会保存到 `.env.hysteria2`(权限 `600`),示例见 [`.env.example.hysteria2`](.env.example.hysteria2)。
 
 ## 📁 Hysteria2 文件位置
 
