@@ -109,6 +109,8 @@ chmod +x deploy.sh
 
 # 把脚本的 stdin 切换到 /dev/tty,这样从 curl | bash 启动也能交互;
 # 没有 tty(纯非交互或仅传 --help/--bbr 等)时保持原 stdin。
-exec 0</dev/tty 2>/dev/null || true
+if (exec 0</dev/tty) >/dev/null 2>&1; then
+  exec ./deploy.sh "$@" </dev/tty
+fi
 
 exec ./deploy.sh "$@"
