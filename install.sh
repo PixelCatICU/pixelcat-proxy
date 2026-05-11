@@ -107,8 +107,8 @@ cp -rf "$src_dir"/. "$APP_DIR"/
 cd "$APP_DIR"
 chmod +x deploy.sh
 
-if : </dev/tty 2>/dev/null; then
-  exec ./deploy.sh "$@" < /dev/tty
-fi
+# 把脚本的 stdin 切换到 /dev/tty,这样从 curl | bash 启动也能交互;
+# 没有 tty(纯非交互或仅传 --help/--bbr 等)时保持原 stdin。
+exec 0</dev/tty 2>/dev/null || true
 
 exec ./deploy.sh "$@"
