@@ -107,7 +107,7 @@ cp -rf "$src_dir"/. "$APP_DIR"/
 cd "$APP_DIR"
 chmod +x deploy.sh
 
-if [ -r /dev/tty ]; then
+if : </dev/tty 2>/dev/null; then
   exec ./deploy.sh "$@" < /dev/tty
 fi
 
