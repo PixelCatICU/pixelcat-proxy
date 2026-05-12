@@ -326,6 +326,17 @@ write_env_line() {
   printf '%s="%s"\n' "$key" "$escaped"
 }
 
+load_env_value() {
+  local file="$1"
+  local key="$2"
+  (
+    set +u
+    # shellcheck disable=SC1090
+    . "$file"
+    eval "printf '%s' \"\${$key:-}\""
+  )
+}
+
 json_escape() {
   printf '%s' "$1" | awk '
     BEGIN { ORS = "" }
@@ -1769,20 +1780,42 @@ uninstall_hysteria2() {
 }
 
 do_install_hysteria2() {
+  local fp_domain="" fp_password="" fp_decoy_domain=""
+  if [ -f ".env" ]; then
+    fp_domain="$(load_env_value ".env" DOMAIN)"
+    fp_password="$(load_env_value ".env" PASSWORD)"
+    fp_decoy_domain="$(load_env_value ".env" DECOY_DOMAIN)"
+  fi
+
+  if [ -z "$DOMAIN" ] && [ -n "$fp_domain" ]; then
+    DOMAIN="$fp_domain"
+  fi
+  if [ -z "$PASSWORD" ] && [ -n "$fp_password" ]; then
+    PASSWORD="$fp_password"
+  fi
+  if [ -z "$DECOY_DOMAIN" ] && [ -n "$fp_decoy_domain" ]; then
+    DECOY_DOMAIN="$fp_decoy_domain"
+  fi
+
   if [ -z "$HY2_DOMAIN" ] && [ -n "$DOMAIN" ]; then
     HY2_DOMAIN="$DOMAIN"
   fi
   HY2_DOMAIN="$(prompt_host HY2_DOMAIN "请输入 Hysteria2 域名" "$HY2_DOMAIN")"
 
   if [ -z "$HY2_PASSWORD" ]; then
-    local generated keep
-    generated="$(generate_password)"
-    if [ "$ASSUME_YES" = "true" ] || [ ! -r /dev/tty ]; then
-      HY2_PASSWORD="$generated"
-      echo "已自动生成 Hysteria2 密码:$HY2_PASSWORD"
+    if [ -n "$PASSWORD" ]; then
+      HY2_PASSWORD="$PASSWORD"
+      echo "Hysteria2 密码默认沿用 ForwardProxy 密码。"
     else
-      read -r -p "请输入 Hysteria2 密码 [回车使用随机密码 $generated]: " keep
-      HY2_PASSWORD="${keep:-$generated}"
+      local generated keep
+      generated="$(generate_password)"
+      if [ "$ASSUME_YES" = "true" ] || [ ! -r /dev/tty ]; then
+        HY2_PASSWORD="$generated"
+        echo "已自动生成 Hysteria2 密码:$HY2_PASSWORD"
+      else
+        read -r -p "请输入 Hysteria2 密码 [回车使用随机密码 $generated]: " keep
+        HY2_PASSWORD="${keep:-$generated}"
+      fi
     fi
   else
     HY2_PASSWORD="$(prompt_password HY2_PASSWORD "请输入 Hysteria2 密码" "$HY2_PASSWORD")"
@@ -1804,6 +1837,9 @@ do_install_hysteria2() {
 
   HY2_UP_MBPS="$(prompt_optional_mbps HY2_UP_MBPS "请输入上行限速 Mbps,0 表示不限速" "$HY2_UP_MBPS" "0")"
   HY2_DOWN_MBPS="$(prompt_optional_mbps HY2_DOWN_MBPS "请输入下行限速 Mbps,0 表示不限速" "$HY2_DOWN_MBPS" "0")"
+  if [ -z "$HY2_MASQUERADE_URL" ] && [ -n "$DECOY_DOMAIN" ]; then
+    HY2_MASQUERADE_URL="https://$DECOY_DOMAIN"
+  fi
   HY2_MASQUERADE_URL="$(prompt_optional_url HY2_MASQUERADE_URL "请输入伪装 URL" "$HY2_MASQUERADE_URL" "$HY2_DEFAULT_MASQUERADE_URL")"
 
   if [ "$HY2_PASSWORD_FROM_ARG" = "true" ]; then
