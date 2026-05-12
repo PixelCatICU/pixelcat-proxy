@@ -2,76 +2,54 @@
   <img src="./pixel-cat.svg" alt="PixelCat" width="120" />
 </p>
 
-# 🐱 像素猫 - 科学上网ICU
+# 像素猫 - PixelCat Proxy
 
-「像素猫 - 科学上网ICU」是一个中文教程博客,主要整理科学上网工具配置、网络诊断、节点维护与隐私安全相关的实用经验。🚀
+PixelCat Proxy 是一份面向 Linux 服务器的中文一键部署脚本,用于部署和维护:
 
-## 🎯 关注方向
+- PixelCat ForwardProxy: Caddy + `forwardproxy` 插件,兼容 NaiveProxy 客户端。
+- PixelCat Hysteria2: QUIC/UDP 代理,支持端口跳跃。
+- 常用节点维护能力: BBR、IP 质量检测、流媒体解锁检测、网络质量/回程检测。
 
-- 🧰 科学上网工具的基础配置与故障排查
-- 🌐 DNS、路由、延迟、丢包等网络问题的定位方法
-- 🔐 面向普通用户的隐私安全与设备自护清单
+默认场景是合法合规的学习、研究、远程办公与公开信息访问。请遵守所在地法律法规以及学校、公司或服务商的网络使用政策。
 
-⚠️ 这里的内容默认用于合法合规的学习、研究、远程办公与公开信息访问场景。任何配置都应该遵守所在地法律法规、学校或公司的网络使用政策。
+## 频道入口
 
-## 📺 频道入口
+- 官网: [pixelcat.icu](https://pixelcat.icu)
+- YouTube: [@PixelCatICU](https://www.youtube.com/@PixelCatICU)
+- GitHub: [PixelCatICU](https://github.com/PixelCatICU)
+- X: [@PixelCatICU](https://x.com/PixelCatICU)
 
-- 🏠 [官网](https://pixelcat.icu)
-- ▶️ [YouTube 订阅](https://www.youtube.com/@PixelCatICU)
-- 💻 [GitHub 地址](https://github.com/PixelCatICU)
-- 🐦 [X](https://x.com/PixelCatICU)
+## 功能概览
 
-# 🎁 项目能做什么
-
-这是一份 **Linux 一键部署脚本**,同时支持以下两种代理协议,两者可以独立部署、也可以在同一台服务器同一个域名共存:
-
-| 协议 | 传输层 | 端口 | 特点 |
+| 功能 | 协议/工具 | 默认端口 | 说明 |
 | --- | --- | --- | --- |
-| **ForwardProxy**(NaiveProxy 兼容) | HTTPS / TCP | 443/tcp | Caddy + `forwardproxy` 插件,反代真实网站做伪装 |
-| **Hysteria2** | QUIC / UDP | 443/udp + 端口跳跃 | 内核层 UDP 端口跳跃(nftables/iptables),抗 QoS、抗封锁 |
+| ForwardProxy | HTTPS/TCP | `443/tcp` | Caddy + `forwardproxy`,普通浏览器访问时反代伪装网站 |
+| Hysteria2 | QUIC/UDP | `443/udp` | 支持 nftables/iptables 端口跳跃 |
+| BBR | Linux sysctl | - | 写入 `/etc/sysctl.d/99-pixelcat-bbr.conf` |
+| IP 质量检测 | xykt/IPQuality | - | 检测原生 IP、风险标签、黑名单、部分解锁状态 |
+| 流媒体解锁检测 | lmc999/RegionRestrictionCheck | - | 检测主流流媒体和区域解锁 |
+| 网络质量/回程检测 | xykt/NetQuality | - | 检测延迟、测速、回程线路 |
 
-共通能力:
+主要特性:
 
-- 🔐 自动申请和续期 Let's Encrypt 证书,同域名时两个协议共享证书
-- 👤 systemd 以专用 `pixelcat-proxy` 用户 + `CAP_NET_BIND_SERVICE` 运行,不裸跑 root
-- 🛡 systemd sandbox:`ProtectSystem=strict` / `ProtectHome` / `PrivateTmp` / `RestrictNamespaces` / `LockPersonality` 等
-- 📁 `.env` / `.env.hysteria2` / 配置文件 0600/0640 权限,密码不全局可读
-- ⚡ 预编译二进制下载,**强制 SHA256 校验**,任一步骤校验失败拒绝使用并回退到本地编译
-- 🦘 输入实时校验(域名 / 用户名 / 端口 / 邮箱 / 端口跳跃范围 / 限速),错误立刻重输,不必重跑脚本
-- 📱 部署完成自动打印对应协议的 sing-box 客户端配置(Hysteria2 自带 `server_ports` 跳跃字段)
-- 🚀 菜单内置一键 BBR
-- 🧹 安装 / 更新 / 卸载 / 彻底清理(`--purge`)
+- 中文菜单和 CLI 参数两种使用方式。
+- 优先下载预编译 Caddy,强制 SHA256 校验;失败时回退本地编译。
+- Hysteria2 官方二进制强制校验 `hashes.txt`。
+- systemd 专用用户 `pixelcat-proxy`,默认不裸跑 root 服务进程。
+- 配置文件和密码文件权限收紧。
+- 安装、更新、卸载、彻底清理都在同一脚本中完成。
 
-启动脚本会显示像素猫 ASCII logo + 中文菜单,5 个选项覆盖以上全部能力。
+## 系统要求
 
-# 🚀 PixelCat ForwardProxy 直装部署
+- Linux + systemd。
+- Debian / Ubuntu / RHEL 系 / Fedora / Alpine 等常见发行版。
+- 域名 `A/AAAA` 记录已解析到服务器。
+- 防火墙和云安全组按需放行:
+  - ForwardProxy: `80/tcp`, `443/tcp`
+  - Hysteria2: `443/udp`,以及端口跳跃范围,默认 `20000-50000/udp`
+- 脚本会自动安装基础依赖;如果预编译 Caddy 不可用,会自动安装 Go 和 xcaddy 进行本地编译。
 
-这个项目提供 PixelCat ForwardProxy 一键部署脚本:优先下载带 `forwardproxy` 插件的预编译 Caddy(并强制校验 SHA256),失败或不可用时再本地编译,然后通过 `systemd` 以专用低权限用户运行。Caddy 会自动申请和续期 HTTPS 证书。🔒
-
-## ✨ 功能
-
-- ⚡ 优先下载预编译 Caddy,强制 SHA256 校验,部署更快也更安全
-- 🔧 校验失败或缺架构时自动回退到本地编译(Go + xcaddy)
-- 🔐 自动申请和续期 Let's Encrypt 证书
-- 🎭 支持反代伪装网站域名
-- 👤 服务以专用系统用户 + `CAP_NET_BIND_SERVICE` 运行,不裸跑 root
-- 📁 配置和密码文件权限收紧:`.env` / Caddyfile 仅服务用户可读
-- 📱 部署完成后自动打印 sing-box 客户端配置
-- 🚀 菜单内置一键开启 BBR
-- 🧹 支持安装、更新、卸载和彻底清理
-
-## ✅ 前置条件
-
-- 🌍 域名 `A/AAAA` 记录已经解析到这台服务器。
-- 🛡️ 服务器防火墙和云厂商安全组放行 `80/tcp` 和 `443/tcp`。
-- 🧱 系统需要 Linux + systemd(Debian / Ubuntu / RHEL 系 / Alpine)。
-- 📦 脚本会自动安装基础依赖;预编译下载失败时,会自动安装 Go、xcaddy 并本地编译。
-
-## ⚡ 一键部署脚本
-
-### ⭐ 方式一:交互式部署(推荐) ⭐
-
-> ✅ 推荐新手优先使用这个方式:复制一条命令运行,然后按中文菜单输入 `1` 安装即可。
+## 一键安装
 
 在服务器执行:
 
@@ -79,27 +57,22 @@
 curl -fsSL https://raw.githubusercontent.com/PixelCatICU/pixelcat-proxy/main/install.sh | bash
 ```
 
-这个入口脚本会自动执行:
+这个入口脚本会下载当前 `main` 分支源码到:
 
-```bash
-mkdir -p /opt/pixelcat
-cd /opt/pixelcat
-git clone https://github.com/PixelCatICU/pixelcat-proxy.git pixelcat-forwardproxy
-cd pixelcat-forwardproxy
-chmod +x deploy.sh
-./deploy.sh
+```text
+/opt/pixelcat/pixelcat-forwardproxy
 ```
 
-如果项目已经存在,它会自动进入 `/opt/pixelcat/pixelcat-forwardproxy` 拉取最新代码,然后启动 `deploy.sh` 菜单。
+然后启动 `deploy.sh` 中文菜单。
 
-如果你已经把项目放到了服务器上,也可以直接:
+如果你已经把项目放到了服务器上,也可以直接运行:
 
 ```bash
 cd /path/to/pixelcat-forwardproxy
 ./deploy.sh
 ```
 
-脚本会显示中文菜单:
+## 菜单
 
 ```text
 1) 安装 / 更新 PixelCat ForwardProxy
@@ -113,28 +86,31 @@ cd /path/to/pixelcat-forwardproxy
 0) 退出
 ```
 
-输入 `1` 后,按中文提示填写部署参数:
+查看全部参数:
 
-- `代理域名`:例如 `proxy.example.com`
-- `代理用户名`:客户端连接用的用户名
-- `代理密码`:客户端连接用的密码(隐藏输入)
-- `伪装网站域名`:例如 `www.example.com`
-- `证书邮箱`:Let's Encrypt 邮箱,可留空
-- `HTTP 端口`:默认 `80`
-- `HTTPS 端口`:默认 `443`
+```bash
+./deploy.sh --help
+```
 
-每个字段都会在输入后立刻校验格式,无效会让你重新输入,不必重新跑脚本。
+## ForwardProxy 部署
 
-部署完成后,脚本会打印:
+交互式部署:
 
-- ✅ systemd 服务状态命令
-- 🔗 代理地址
-- 📱 sing-box 客户端配置
-- 📜 日志查看命令
+```bash
+./deploy.sh
+```
 
-### 方式二:带参数部署
+菜单选择 `1`,然后按提示填写:
 
-也可以一次性传入参数(`-y` 用于免确认覆盖 `.env`):
+- 代理域名: 例如 `proxy.example.com`
+- 代理用户名
+- 代理密码
+- 伪装网站域名: 例如 `www.example.com`,不要带 `https://`
+- Let's Encrypt 邮箱: 可留空
+- HTTP 端口: 默认 `80`
+- HTTPS 端口: 默认 `443`
+
+带参数部署:
 
 ```bash
 ./deploy.sh --install -y \
@@ -145,79 +121,47 @@ cd /path/to/pixelcat-forwardproxy
   --email admin@example.com
 ```
 
-生产环境更推荐交互式输入密码,因为 `--password` 参数可能被 shell 历史或进程列表记录。
+生产环境更推荐交互式输入密码,因为 `--password` 可能被 shell 历史或进程列表记录。
 
-如果你想强制本地编译,不下载预编译文件:
+强制本地编译 Caddy:
 
 ```bash
 ./deploy.sh --install --build-from-source
 ```
 
-### 方式三:只生成配置
-
-只生成 `.env`、Caddyfile 和 systemd 配置,不启动服务:
+只生成配置,不启动服务:
 
 ```bash
 ./deploy.sh --install --skip-start
 ```
 
-### 🚀 一键开启 BBR
+### ForwardProxy 文件位置
 
-交互菜单输入 `3`,或直接执行:
-
-```bash
-./deploy.sh --bbr
+```text
+/usr/local/bin/caddy-forwardproxy
+/etc/pixelcat-forwardproxy/Caddyfile
+/var/lib/pixelcat-forwardproxy
+/etc/systemd/system/pixelcat-forwardproxy.service
+/opt/pixelcat/pixelcat-forwardproxy/.env
 ```
 
-脚本会写入 `/etc/sysctl.d/99-pixelcat-bbr.conf` 并执行 `sysctl --system`:
-
-```conf
-net.core.default_qdisc=fq
-net.ipv4.tcp_congestion_control=bbr
-```
-
-查看当前 BBR 状态:
-
-```bash
-sysctl net.ipv4.tcp_congestion_control
-sysctl net.core.default_qdisc
-```
-
-### 常用命令
-
-查看服务状态:
+### ForwardProxy 常用命令
 
 ```bash
 systemctl status pixelcat-forwardproxy --no-pager
-```
-
-查看日志:
-
-```bash
 journalctl -u pixelcat-forwardproxy -f
-```
-
-重启服务:
-
-```bash
 systemctl restart pixelcat-forwardproxy
 ```
 
-查看脚本帮助:
+### ForwardProxy 卸载
 
-```bash
-./deploy.sh --help
-```
-
-## 🧹 卸载服务
-
-停止并删除 PixelCat ForwardProxy systemd 服务,保留配置和证书数据:
+保留配置和证书数据:
 
 ```bash
 ./deploy.sh --uninstall
 ```
 
-完全卸载,连配置、证书数据、本地 Go 工具、系统用户和 `.env` 一起删除:
+彻底清理配置、证书数据、本地 Go 工具、系统用户和 `.env`:
 
 ```bash
 ./deploy.sh --uninstall --purge
@@ -229,32 +173,158 @@ systemctl restart pixelcat-forwardproxy
 ./deploy.sh --uninstall -y
 ```
 
-## 📱 sing-box 客户端配置
+## Hysteria2 部署
 
-客户端代理地址通常填写:
+交互式部署:
 
-```text
-https://USERNAME:PASSWORD@DOMAIN
+```bash
+./deploy.sh
 ```
 
-✨ 示例:
+菜单选择 `2`,然后按提示填写:
 
-```text
-https://your_user:change_this_strong_password@proxy.example.com
+- Hysteria2 域名: 如果当前目录已有 ForwardProxy `.env`,默认沿用 `DOMAIN`。
+- Hysteria2 密码: 如果当前目录已有 ForwardProxy `.env`,默认沿用 `PASSWORD`;没有可复用密码时才自动生成随机密码。
+- 监听 UDP 端口: 默认 `443`。
+- 端口跳跃范围: 默认 `20000-50000`,输入 `off` 关闭。
+- 上行/下行限速 Mbps: 默认 `0`,表示不限速。
+- 伪装 URL: 如果当前目录已有 ForwardProxy `.env`,默认沿用 `https://DECOY_DOMAIN`;否则默认 `https://www.bing.com`。
+
+带参数部署:
+
+```bash
+./deploy.sh --install-hysteria2 -y \
+  --hy2-domain proxy.example.com \
+  --hy2-port 443 \
+  --hy2-hop-range 20000-50000 \
+  --hy2-up-mbps 0 \
+  --hy2-down-mbps 0 \
+  --hy2-masquerade https://www.bing.com
 ```
 
-部署完成后脚本会自动打印 sing-box 配置。结构类似:
+只安装 Hysteria2 且复用现有 ForwardProxy 配置时,可以直接执行:
+
+```bash
+./deploy.sh --install-hysteria2 -y
+```
+
+显式传入 `--hy2-domain`、`--hy2-password` 或 `--hy2-masquerade` 时,会覆盖从 ForwardProxy `.env` 读取到的默认值。
+
+关闭端口跳跃:
+
+```bash
+./deploy.sh --install-hysteria2 -y --hy2-hop-range off
+```
+
+只生成配置,不启动服务:
+
+```bash
+./deploy.sh --install-hysteria2 --skip-start
+```
+
+### Hysteria2 证书逻辑
+
+- 如果已部署 ForwardProxy 且域名一致,脚本会优先复用 Caddy 已签发的证书。
+- 如果没有可复用证书,Hysteria2 会自己使用 ACME 申请证书。
+- Hysteria2 自申请 ACME 时需要 `443/tcp` 可用于 TLS-ALPN-01 校验。
+
+### Hysteria2 文件位置
+
+```text
+/usr/local/bin/pixelcat-hysteria2
+/etc/pixelcat-hysteria2/config.yaml
+/etc/pixelcat-hysteria2/hop-up.sh
+/etc/pixelcat-hysteria2/hop-down.sh
+/var/lib/pixelcat-hysteria2
+/etc/systemd/system/pixelcat-hysteria2.service
+/etc/systemd/system/pixelcat-hysteria2-hop.service
+/etc/sysctl.d/99-pixelcat-hysteria2.conf
+/opt/pixelcat/pixelcat-forwardproxy/.env.hysteria2
+```
+
+### Hysteria2 常用命令
+
+```bash
+systemctl status pixelcat-hysteria2 --no-pager
+systemctl status pixelcat-hysteria2-hop --no-pager
+journalctl -u pixelcat-hysteria2 -f
+systemctl restart pixelcat-hysteria2
+nft list table inet pixelcat-hy 2>/dev/null || iptables -t nat -L PREROUTING -n
+```
+
+### Hysteria2 卸载
+
+保留配置和证书数据:
+
+```bash
+./deploy.sh --uninstall-hysteria2
+```
+
+彻底清理配置、证书数据和 `.env.hysteria2`:
+
+```bash
+./deploy.sh --uninstall-hysteria2 --purge
+```
+
+免确认卸载:
+
+```bash
+./deploy.sh --uninstall-hysteria2 -y
+```
+
+## BBR
+
+菜单选择 `5`,或直接执行:
+
+```bash
+./deploy.sh --bbr
+```
+
+检查当前状态:
+
+```bash
+sysctl net.ipv4.tcp_congestion_control
+sysctl net.core.default_qdisc
+```
+
+脚本会写入:
+
+```conf
+net.core.default_qdisc=fq
+net.ipv4.tcp_congestion_control=bbr
+```
+
+## 节点诊断工具
+
+三个诊断入口会下载并运行第三方检测脚本:
+
+```bash
+./deploy.sh --ip-quality
+./deploy.sh --unlock-check
+./deploy.sh --net-quality
+```
+
+来源:
+
+- `--ip-quality`: [xykt/IPQuality](https://github.com/xykt/IPQuality)
+- `--unlock-check`: [lmc999/RegionRestrictionCheck](https://github.com/lmc999/RegionRestrictionCheck)
+- `--net-quality`: [xykt/NetQuality](https://github.com/xykt/NetQuality)
+
+说明:
+
+- 脚本会尽量自动安装 `jq`、`dig`、`mtr`、`iperf3`、`bc`、`imagemagick`、`nexttrace` 等检测依赖。
+- 部分检测项需要 root 权限或完整网络连通性。
+- 第三方脚本可能在生成报告后仍返回非 0 状态码,这种情况会显示报告链接,同时提示执行返回码。
+- 网络质量/回程检测耗时较长,可能受目标测速点、BGP 数据源或路由探测可用性影响。
+
+## 客户端配置
+
+部署完成后脚本会自动打印对应协议的 sing-box 配置。
+
+ForwardProxy 输出示例:
 
 ```json
 {
-  "inbounds": [
-    {
-      "type": "mixed",
-      "tag": "mixed-in",
-      "listen": "127.0.0.1",
-      "listen_port": 2080
-    }
-  ],
   "outbounds": [
     {
       "type": "naive",
@@ -276,188 +346,7 @@ https://your_user:change_this_strong_password@proxy.example.com
 }
 ```
 
-## ⚙️ 配置项
-
-| 变量 | 必填 | 说明 |
-| --- | --- | --- |
-| `DOMAIN` | 是 | 用于申请证书和访问代理的域名 |
-| `USERNAME` | 是 | Basic Auth 用户名 |
-| `PASSWORD` | 是 | Basic Auth 密码 |
-| `DECOY_DOMAIN` | 是 | 反代伪装网站域名,普通浏览器访问 `DOMAIN` 时会反代显示该网站 |
-| `EMAIL` | 否 | Let's Encrypt 账号邮箱 |
-| `HTTP_PORT` | 否 | HTTP 端口,默认 `80` |
-| `HTTPS_PORT` | 否 | HTTPS 代理端口,默认 `443` |
-
-脚本会把配置保存到当前项目目录下的 `.env`(权限 `600`),并把 Caddyfile 写入:
-
-```text
-/etc/pixelcat-forwardproxy/Caddyfile   (root:pixelcat-proxy 0640)
-```
-
-证书和 Caddy 数据默认保存到:
-
-```text
-/var/lib/pixelcat-forwardproxy         (pixelcat-proxy:pixelcat-proxy 0700)
-```
-
-systemd 服务以专用用户 `pixelcat-proxy` 运行,通过 `AmbientCapabilities=CAP_NET_BIND_SERVICE` 获得绑定 80/443 端口的能力,并启用了 `ProtectSystem`、`ProtectHome`、`PrivateTmp`、`RestrictNamespaces` 等加固项。
-
-## ⚠️ 注意
-
-- 🌍 首次启动需要公网访问到 `DOMAIN:80` 和 `DOMAIN:443`,否则证书申请可能失败。
-- 🎭 `DECOY_DOMAIN` 只填写域名,不要带 `https://`,例如 `www.example.com`。
-- 🧩 复杂网站可能因为 Cookie、CSP、WebSocket 或静态资源跨域限制导致反代显示不完整,静态博客、文档站、简单官网更适合做伪装站。
-- 💾 `/var/lib/pixelcat-forwardproxy` 保存证书和 ACME 账号信息,不要随意删除。
-- ☁️ 如果域名套了 CDN,需要确认 CDN 支持 HTTPS 代理流量,否则建议 DNS 记录先仅 DNS 解析,不启用代理。
-- 🖥️ 部署完成后脚本会把 sing-box 配置(含明文密码)输出到终端,请避免在公开场合显示或截图。
-
-# 🚀 PixelCat Hysteria2 部署
-
-这个项目同时支持一键部署 Hysteria2 服务器:基于 QUIC/UDP 的代理协议,内置 BBR,自动 TLS,可配合**端口跳跃**降低单端口被识别/限速的概率。
-
-## ✨ Hysteria2 功能
-
-- ⚡ 直接下载 Hysteria 官方预编译二进制,强制 SHA256 校验
-- 🔐 自动复用 ForwardProxy 的 Caddy 证书;若未部署 Caddy 则 Hysteria2 自申请 ACME 证书
-- 🦘 内核层 UDP 端口跳跃(优先 nftables,回退 iptables)
-- 👤 与 ForwardProxy 共用 `pixelcat-proxy` 系统用户 + `CAP_NET_BIND_SERVICE`,不裸跑 root
-- 🎭 内置伪装站点反代(默认 `https://www.bing.com`)
-- 📱 部署完成后自动打印 sing-box 客户端配置(含 `server_ports` 端口跳跃字段)
-- 🧹 支持安装、更新、卸载和彻底清理
-
-## ✅ Hysteria2 前置条件
-
-- 🌍 域名 `A/AAAA` 记录已经解析到这台服务器(可与 ForwardProxy 同域名)。
-- 🛡️ 防火墙和安全组放行 `443/udp` 以及端口跳跃范围(默认 `20000-50000/udp`)。
-- 🧱 系统需要 Linux + systemd,端口跳跃需要 nftables 或 iptables(脚本会自动安装)。
-- 🪪 **证书来源**:
-  - 已部署 ForwardProxy 且域名一致 → 自动复用 Caddy 已申请的证书,零证书配置
-  - 未部署 ForwardProxy → Hysteria2 自己跑 ACME,需要 80/tcp **和** 443/tcp 空闲
-
-## ⚡ Hysteria2 部署方式
-
-### ⭐ 方式一:交互式部署
-
-```bash
-./deploy.sh
-```
-
-菜单选择 `2)`,按提示填:
-
-- `Hysteria2 域名`:留空默认沿用 ForwardProxy 的域名
-- `Hysteria2 密码`:留空自动生成随机强密码
-- `监听 UDP 端口`:默认 `443`
-- `端口跳跃范围`:默认 `20000-50000`;输入 `off` 关闭
-- `上行/下行限速 Mbps`:默认 `0`(不限速)
-- `伪装 URL`:默认 `https://www.bing.com`
-
-### 方式二:带参数部署
-
-```bash
-./deploy.sh --install-hysteria2 -y \
-  --hy2-domain proxy.example.com \
-  --hy2-port 443 \
-  --hy2-hop-range 20000-50000 \
-  --hy2-up-mbps 0 \
-  --hy2-down-mbps 0 \
-  --hy2-masquerade https://www.bing.com
-```
-
-完整 CLI 参数:
-
-| 参数 | 默认 | 说明 |
-| --- | --- | --- |
-| `--hy2-domain` | 沿用 `--domain` | TLS SNI 域名 |
-| `--hy2-password` | 自动生成 32 位强密码 | 客户端密码 |
-| `--hy2-port` | `443` | UDP 监听端口 |
-| `--hy2-hop-range` | `20000-50000` | 端口跳跃范围,传 `off` 关闭 |
-| `--hy2-hop-iface` | 自动检测默认路由网卡 | DNAT 网卡(`ip route show default` 解析) |
-| `--hy2-up-mbps` | `0`(不限速) | 上行限速 Mbps |
-| `--hy2-down-mbps` | `0`(不限速) | 下行限速 Mbps |
-| `--hy2-masquerade` | `https://www.bing.com` | 伪装站点 URL |
-
-不传 `--hy2-password` 会自动生成强密码(并打印到终端)。
-
-关闭端口跳跃:
-
-```bash
-./deploy.sh --install-hysteria2 -y --hy2-hop-range off
-```
-
-### 方式三:只生成配置
-
-```bash
-./deploy.sh --install-hysteria2 --skip-start
-```
-
-### Hysteria2 常用命令
-
-```bash
-# 服务状态
-systemctl status pixelcat-hysteria2 --no-pager
-systemctl status pixelcat-hysteria2-hop --no-pager   # 端口跳跃 oneshot
-
-# 实时日志
-journalctl -u pixelcat-hysteria2 -f
-
-# 重启
-systemctl restart pixelcat-hysteria2
-
-# 查看当前生效的跳跃规则
-nft list table inet pixelcat-hy 2>/dev/null || \
-  iptables -t nat -L PREROUTING -n
-```
-
-## 🧹 卸载 Hysteria2
-
-保留配置和证书:
-
-```bash
-./deploy.sh --uninstall-hysteria2
-```
-
-完全清理(配置、证书、`.env.hysteria2`,以及在 ForwardProxy 也卸载的前提下连同系统用户):
-
-```bash
-./deploy.sh --uninstall-hysteria2 --purge
-```
-
-免确认卸载:
-
-```bash
-./deploy.sh --uninstall-hysteria2 -y
-```
-
-## ⚙️ Hysteria2 配置项
-
-| 变量 | 必填 | 默认 | 说明 |
-| --- | --- | --- | --- |
-| `HY2_DOMAIN` | 是 | 沿用 `DOMAIN` | TLS SNI 域名 |
-| `HY2_PASSWORD` | 是 | 自动生成 | 客户端密码 |
-| `HY2_PORT` | 否 | `443` | UDP 监听端口 |
-| `HY2_HOP_RANGE` | 否 | `20000-50000` | 端口跳跃范围,留空或 `off` 关闭 |
-| `HY2_HOP_IFACE` | 否 | 自动检测 | DNAT 使用的网卡 |
-| `HY2_UP_MBPS` | 否 | `0` | 上行限速 Mbps,`0` = 不限速 |
-| `HY2_DOWN_MBPS` | 否 | `0` | 下行限速 Mbps,`0` = 不限速 |
-| `HY2_MASQUERADE_URL` | 否 | `https://www.bing.com` | 伪装站点 URL |
-
-配置会保存到 `.env.hysteria2`(权限 `600`),示例见 [`.env.example.hysteria2`](.env.example.hysteria2)。
-
-## 📁 Hysteria2 文件位置
-
-```text
-/usr/local/bin/pixelcat-hysteria2                     # 二进制
-/etc/pixelcat-hysteria2/config.yaml                   # 配置 0640 root:pixelcat-proxy
-/etc/pixelcat-hysteria2/hop-up.sh / hop-down.sh       # 端口跳跃规则脚本
-/var/lib/pixelcat-hysteria2/                          # ACME 数据 0700 pixelcat-proxy
-/etc/systemd/system/pixelcat-hysteria2.service        # 主服务
-/etc/systemd/system/pixelcat-hysteria2-hop.service    # 端口跳跃 oneshot 服务
-/etc/sysctl.d/99-pixelcat-hysteria2.conf              # UDP 缓冲调优
-```
-
-## 📱 Hysteria2 sing-box 客户端配置
-
-部署完成后脚本会自动打印类似:
+Hysteria2 输出示例:
 
 ```json
 {
@@ -480,32 +369,49 @@ nft list table inet pixelcat-hy 2>/dev/null || \
 }
 ```
 
-启用了端口跳跃时,客户端会在 `server_ports` 范围内随机选 UDP 端口发包,服务器内核侧 DNAT 到实际监听端口 (`server_port`)。
+客户端配置包含明文密码,不要在公开场合展示或截图。
 
-## ⚠️ Hysteria2 注意事项
+## 配置变量
 
-- 🔥 防火墙务必放行 `HY2_PORT/udp`(默认 `443/udp`)和整个跳跃范围。
-- 🧱 端口跳跃用 nftables 优先;OpenVZ 等不支持 nftables/iptables-nat 的虚拟化平台,请用 `--hy2-hop-range off` 关闭跳跃。
-- 🪪 ACME 自申请模式会用 443/tcp 完成 ALPN-01 校验,因此**不能和 ForwardProxy 不同域名却共用 Caddy** —— 真要不同域名,把 Hysteria2 域名也加到 Caddyfile 让 Caddy 一并签发。
-- 📡 默认 UDP 缓冲已调到 16MB(`/etc/sysctl.d/99-pixelcat-hysteria2.conf`),如需进一步性能调优可改大。
-- 🖥️ sing-box 配置含明文密码,请勿在公开场合显示或截图。
+ForwardProxy:
 
-# 📚 其它
+| 变量 | 必填 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `DOMAIN` | 是 | - | 代理域名 |
+| `USERNAME` | 是 | - | Basic Auth 用户名 |
+| `PASSWORD` | 是 | - | Basic Auth 密码 |
+| `DECOY_DOMAIN` | 是 | - | 伪装站点域名,不要带协议 |
+| `EMAIL` | 否 | 空 | Let's Encrypt 邮箱 |
+| `HTTP_PORT` | 否 | `80` | HTTP 端口 |
+| `HTTPS_PORT` | 否 | `443` | HTTPS 代理端口 |
 
-## 📦 发布预编译 Caddy
+Hysteria2:
 
-这个项目内置 GitHub Actions,会在发布 GitHub Release 时自动编译:
+| 变量 | 必填 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `HY2_DOMAIN` | 是 | 优先沿用 `.env` 里的 `DOMAIN` | TLS SNI 域名 |
+| `HY2_PASSWORD` | 是 | 优先沿用 `.env` 里的 `PASSWORD`,否则自动生成 | 客户端密码 |
+| `HY2_PORT` | 否 | `443` | UDP 监听端口 |
+| `HY2_HOP_RANGE` | 否 | `20000-50000` | 端口跳跃范围,留空或 `off` 关闭 |
+| `HY2_HOP_IFACE` | 否 | 自动检测 | DNAT 使用的网卡 |
+| `HY2_UP_MBPS` | 否 | `0` | 上行限速 Mbps |
+| `HY2_DOWN_MBPS` | 否 | `0` | 下行限速 Mbps |
+| `HY2_MASQUERADE_URL` | 否 | 优先沿用 `.env` 里的 `https://DECOY_DOMAIN`,否则 `https://www.bing.com` | 伪装站点 URL |
+
+## 发布预编译 Caddy
+
+发布 GitHub Release 时,GitHub Actions 会构建:
 
 ```text
 caddy-forwardproxy-linux-amd64.tar.gz
 caddy-forwardproxy-linux-arm64.tar.gz
 ```
 
-每个产物都会同时上传 `.sha256` 校验和文件。部署脚本会**强制验证 SHA256**:
+每个产物会同时上传 `.sha256` 文件。部署脚本会强制校验:
 
-- 校验和文件下载失败 → 拒绝使用未经校验的二进制,自动回退到本地编译
-- 校验和不匹配 → 拒绝使用,自动回退到本地编译
-- 系统缺少 `sha256sum` → 自动回退到本地编译
+- 校验和文件下载失败: 拒绝使用,回退本地编译。
+- 校验和不匹配: 拒绝使用,回退本地编译。
+- 缺少 `sha256sum`: 回退本地编译。
 
 发布方式:
 
@@ -514,6 +420,19 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-然后在 GitHub 仓库页面创建 Release,选择这个 tag 并发布。发布后 Actions 会自动把二进制文件和校验和上传到 Release Assets。
+然后在 GitHub Release 页面发布这个 tag。也可以在 GitHub Actions 页面手动运行 `Build Caddy ForwardProxy`。
 
-也可以在 GitHub Actions 页面手动运行 `Build Caddy ForwardProxy`,先检查构建是否正常。
+## 开源协议
+
+本项目采用 [GNU General Public License v3.0](./LICENSE) 开源协议。
+
+你可以自由使用、复制、修改和分发本项目代码;如果分发修改版或基于本项目的衍生作品,需要继续按照 GPLv3 开源,并保留原版权声明和许可证文本。
+
+## 注意事项
+
+- 首次申请证书时,公网必须能访问到对应域名和端口。
+- `DECOY_DOMAIN` 只填域名,例如 `www.example.com`。
+- 复杂网站可能因为 Cookie、CSP、WebSocket 或静态资源跨域限制导致反代显示不完整。
+- `/var/lib/pixelcat-forwardproxy` 和 `/var/lib/pixelcat-hysteria2` 保存证书和 ACME 数据,不要随意删除。
+- 如果域名套了 CDN,请确认 CDN 支持相关代理流量;不确定时先使用仅 DNS 解析。
+- OpenVZ 等不支持 nftables/iptables NAT 的环境,建议关闭 Hysteria2 端口跳跃。
