@@ -837,7 +837,7 @@ User=$SERVICE_USER
 Group=$SERVICE_GROUP
 Environment=HOME=$DATA_DIR
 Environment=XDG_DATA_HOME=$DATA_DIR
-Environment=XDG_CONFIG_HOME=$INSTALL_DIR
+Environment=XDG_CONFIG_HOME=$DATA_DIR
 ExecStart=$CADDY_BIN run --config $INSTALL_DIR/Caddyfile --adapter caddyfile
 ExecReload=$CADDY_BIN reload --config $INSTALL_DIR/Caddyfile --adapter caddyfile --force
 Restart=on-failure
