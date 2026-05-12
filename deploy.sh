@@ -64,6 +64,9 @@ PixelCat 一键脚本(ForwardProxy + Hysteria2)
   ./deploy.sh --uninstall              卸载 PixelCat ForwardProxy
   ./deploy.sh --uninstall-hysteria2    卸载 PixelCat Hysteria2
   ./deploy.sh --bbr                    一键开启 BBR
+  ./deploy.sh --ip-quality             运行 IP 质量检测
+  ./deploy.sh --unlock-check           运行流媒体解锁检测
+  ./deploy.sh --net-quality            运行网络质量 / 回程检测
 
 通用选项:
       --purge           配合 --uninstall* 一起删除配置、证书数据和系统用户
@@ -127,6 +130,18 @@ while [ "$#" -gt 0 ]; do
       ;;
     --bbr)
       ACTION="bbr"
+      shift
+      ;;
+    --ip-quality)
+      ACTION="ip-quality"
+      shift
+      ;;
+    --unlock-check)
+      ACTION="unlock-check"
+      shift
+      ;;
+    --net-quality)
+      ACTION="net-quality"
       shift
       ;;
     --build-from-source)
@@ -1007,6 +1022,173 @@ EOF
   fi
 }
 
+# ===== 节点诊断工具 =====
+
+DIAGNOSTIC_DEPS_PREPPED="false"
+
+ensure_curl_available() {
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "未检测到 curl,正在安装基础依赖..."
+    install_base_packages
+  fi
+}
+
+ensure_diagnostic_deps() {
+  if [ "$DIAGNOSTIC_DEPS_PREPPED" = "true" ]; then
+    return 0
+  fi
+
+  need_linux
+  ensure_curl_available
+
+  if [ ! -f /etc/os-release ]; then
+    echo "无法识别发行版,跳过诊断依赖预装(可能影响检测脚本运行)。" >&2
+    DIAGNOSTIC_DEPS_PREPPED="true"
+    return 0
+  fi
+
+  # shellcheck disable=SC1091
+  . /etc/os-release
+
+  local missing=""
+  local cmd
+  for cmd in jq dig mtr iperf3 bc convert; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      missing="${missing}${cmd} "
+    fi
+  done
+
+  if [ -n "$missing" ]; then
+    echo "正在安装诊断脚本依赖: ${missing}"
+    case "${ID:-} ${ID_LIKE:-}" in
+      *ubuntu*|*debian*)
+        run_as_root apt-get update
+        run_as_root apt-get install -y jq dnsutils mtr-tiny iperf3 bc imagemagick
+        ;;
+      *ol*|*oracle*|*centos*|*rhel*|*rocky*|*almalinux*|*fedora*)
+        if command -v dnf >/dev/null 2>&1; then
+          run_as_root dnf install -y jq bind-utils mtr iperf3 bc
+          run_as_root dnf install -y epel-release 2>/dev/null || true
+          run_as_root dnf install -y ImageMagick 2>/dev/null || \
+            echo "ImageMagick 未能自动安装,IP 质量报告图片可能不可用。" >&2
+        elif command -v yum >/dev/null 2>&1; then
+          run_as_root yum install -y jq bind-utils mtr iperf3 bc
+          run_as_root yum install -y epel-release 2>/dev/null || true
+          run_as_root yum install -y ImageMagick 2>/dev/null || \
+            echo "ImageMagick 未能自动安装,IP 质量报告图片可能不可用。" >&2
+        else
+          echo "未找到 dnf 或 yum,无法预装诊断依赖。" >&2
+        fi
+        ;;
+      *alpine*)
+        run_as_root apk add --no-cache jq bind-tools mtr iperf3 bc imagemagick
+        ;;
+      *)
+        echo "暂不支持自动预装诊断依赖的系统: ${PRETTY_NAME:-unknown}" >&2
+        echo "请先手动安装 jq dig mtr iperf3 bc imagemagick,然后重试。" >&2
+        ;;
+    esac
+  fi
+
+  if ! command -v nexttrace >/dev/null 2>&1; then
+    echo "正在安装 nexttrace(回程路由检测依赖)..."
+    local nt_script
+    if nt_script="$(mktemp -t pixelcat-nt.XXXXXX)"; then
+      if curl -fsSL https://nxtrace.org/nt -o "$nt_script" && [ -s "$nt_script" ]; then
+        bash "$nt_script" || echo "nexttrace 安装脚本返回失败,回程路由检测可能不可用。" >&2
+      else
+        echo "下载 nexttrace 安装脚本失败,回程路由检测可能不可用。" >&2
+      fi
+      rm -f "$nt_script"
+    else
+      echo "无法创建临时文件,跳过 nexttrace 安装。" >&2
+    fi
+  fi
+
+  DIAGNOSTIC_DEPS_PREPPED="true"
+}
+
+run_remote_diagnostic() {
+  local title="$1"
+  local source_url="$2"
+  local fetch_url="$3"
+  shift 3
+
+  need_linux
+  ensure_curl_available
+
+  echo
+  echo "===== ${title} ====="
+  echo "来源: ${source_url}"
+  if [ "$(id -u)" -ne 0 ]; then
+    echo "提示: 当前非 root 用户,部分子项(如 mtr / 路由探测)可能无法运行,可考虑使用 sudo 重新运行。"
+  fi
+  echo "----------------------------------------"
+
+  local tmp_script
+  if ! tmp_script="$(mktemp -t pixelcat-diag.XXXXXX)"; then
+    echo "无法创建临时文件,无法继续。" >&2
+    return 1
+  fi
+  trap 'rm -f "$tmp_script"' EXIT
+
+  if ! curl -fsSL "$fetch_url" -o "$tmp_script"; then
+    echo "----------------------------------------"
+    echo "下载远程脚本失败: ${fetch_url}" >&2
+    echo "请检查网络连通性后重试。" >&2
+    rm -f "$tmp_script"
+    trap - EXIT
+    return 1
+  fi
+
+  if [ ! -s "$tmp_script" ]; then
+    echo "----------------------------------------"
+    echo "远程脚本下载结果为空: ${fetch_url}" >&2
+    rm -f "$tmp_script"
+    trap - EXIT
+    return 1
+  fi
+
+  local rc=0
+  bash "$tmp_script" "$@" || rc=$?
+
+  rm -f "$tmp_script"
+  trap - EXIT
+
+  echo "----------------------------------------"
+  if [ "$rc" -ne 0 ]; then
+    echo "${title} 执行返回码 ${rc},如系网络问题请稍后重试。" >&2
+    return "$rc"
+  fi
+  echo "${title} 完成。"
+}
+
+run_ip_quality() {
+  ensure_diagnostic_deps
+  run_remote_diagnostic \
+    "IP 质量检测 (xykt/IPQuality)" \
+    "https://github.com/xykt/IPQuality" \
+    "https://IP.Check.Place" \
+    -n -l cn
+}
+
+run_unlock_check() {
+  run_remote_diagnostic \
+    "流媒体解锁检测 (lmc999/RegionRestrictionCheck)" \
+    "https://github.com/lmc999/RegionRestrictionCheck" \
+    "https://raw.githubusercontent.com/lmc999/RegionRestrictionCheck/main/check.sh" \
+    -E zh
+}
+
+run_net_quality() {
+  ensure_diagnostic_deps
+  run_remote_diagnostic \
+    "网络质量 / 回程检测 (xykt/NetQuality)" \
+    "https://github.com/xykt/NetQuality" \
+    "https://Net.Check.Place" \
+    -n -l cn
+}
+
 # ===== Hysteria2 =====
 
 is_valid_hop_range() {
@@ -1692,10 +1874,13 @@ X: https://x.com/PixelCatICU
 3) 卸载 PixelCat ForwardProxy
 4) 卸载 PixelCat Hysteria2
 5) 一键开启 BBR
+6) IP 质量检测           (xykt/IPQuality)
+7) 流媒体解锁检测         (lmc999/RegionRestrictionCheck)
+8) 网络质量 / 回程检测     (xykt/NetQuality)
 0) 退出
 
 MENU
-    read -r -p "请输入选项 [1/2/3/4/5/0]: " choice
+    read -r -p "请输入选项 [1-8/0]: " choice
     case "$choice" in
       1)
         ACTION="install"
@@ -1733,6 +1918,18 @@ MENU
         ACTION="bbr"
         return
         ;;
+      6)
+        ACTION="ip-quality"
+        return
+        ;;
+      7)
+        ACTION="unlock-check"
+        return
+        ;;
+      8)
+        ACTION="net-quality"
+        return
+        ;;
       0)
         echo "已退出。"
         exit 0
@@ -1760,6 +1957,21 @@ fi
 
 if [ "$ACTION" = "bbr" ]; then
   enable_bbr
+  exit 0
+fi
+
+if [ "$ACTION" = "ip-quality" ]; then
+  run_ip_quality
+  exit 0
+fi
+
+if [ "$ACTION" = "unlock-check" ]; then
+  run_unlock_check
+  exit 0
+fi
+
+if [ "$ACTION" = "net-quality" ]; then
+  run_net_quality
   exit 0
 fi
 

@@ -107,6 +107,9 @@ cd /path/to/pixelcat-forwardproxy
 3) 卸载 PixelCat ForwardProxy
 4) 卸载 PixelCat Hysteria2
 5) 一键开启 BBR
+6) IP 质量检测           (xykt/IPQuality)
+7) 流媒体解锁检测         (lmc999/RegionRestrictionCheck)
+8) 网络质量 / 回程检测     (xykt/NetQuality)
 0) 退出
 ```
 
