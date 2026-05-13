@@ -53,6 +53,48 @@ HY2_RELEASE_BASE_URL="${HY2_RELEASE_BASE_URL:-https://github.com/apernet/hysteri
 HY2_DEFAULT_HOP_RANGE="20000-50000"
 HY2_DEFAULT_MASQUERADE_URL="https://www.bing.com"
 
+if [ -z "${NO_COLOR:-}" ] && { [ -t 1 ] || [ -t 2 ]; }; then
+  C_RESET=$'\033[0m'
+  C_BOLD=$'\033[1m'
+  C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'
+  C_GREEN=$'\033[32m'
+  C_YELLOW=$'\033[33m'
+  C_BLUE=$'\033[34m'
+  C_MAGENTA=$'\033[35m'
+  C_CYAN=$'\033[36m'
+else
+  C_RESET=""
+  C_BOLD=""
+  C_DIM=""
+  C_RED=""
+  C_GREEN=""
+  C_YELLOW=""
+  C_BLUE=""
+  C_MAGENTA=""
+  C_CYAN=""
+fi
+
+color_prompt() {
+  printf '%b%s%b' "${C_BOLD}${C_CYAN}" "$1" "$C_RESET"
+}
+
+info() {
+  printf '%b%s%b\n' "$C_BLUE" "$1" "$C_RESET"
+}
+
+success() {
+  printf '%b%s%b\n' "$C_GREEN" "$1" "$C_RESET"
+}
+
+warn() {
+  printf '%b%s%b\n' "$C_YELLOW" "$1" "$C_RESET" >&2
+}
+
+error() {
+  printf '%b%s%b\n' "$C_RED" "$1" "$C_RESET" >&2
+}
+
 usage() {
   cat <<'USAGE'
 PixelCat 一键脚本(ForwardProxy + Hysteria2)
@@ -101,7 +143,7 @@ require_option_value() {
   local option="$1"
   local value="${2:-}"
   if [ -z "$value" ]; then
-    echo "$option 需要一个值。" >&2
+    error "$option 需要一个值。"
     exit 1
   fi
 }
@@ -238,7 +280,7 @@ while [ "$#" -gt 0 ]; do
       exit 0
       ;;
     *)
-      echo "未知选项: $1" >&2
+      error "未知选项: $1"
       usage >&2
       exit 1
       ;;
@@ -246,7 +288,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ "$PURGE" = "true" ] && [ "$ACTION" != "uninstall" ] && [ "$ACTION" != "uninstall-hysteria2" ]; then
-  echo "--purge 只能和 --uninstall / --uninstall-hysteria2 一起使用。" >&2
+  error "--purge 只能和 --uninstall / --uninstall-hysteria2 一起使用。"
   exit 1
 fi
 
@@ -264,7 +306,7 @@ run_as_root() {
   elif command -v sudo >/dev/null 2>&1; then
     sudo "$@"
   else
-    echo "需要 root 权限,但系统没有 sudo。请使用 root 运行脚本。" >&2
+    error "需要 root 权限,但系统没有 sudo。请使用 root 运行脚本。"
     exit 1
   fi
 }
@@ -384,7 +426,7 @@ prompt_host() {
   if [ -n "$current_value" ]; then
     value="$(strip_scheme "$current_value")"
     if ! is_valid_host "$value"; then
-      echo "$var_name 无效: $current_value" >&2
+      error "$var_name 无效: $current_value"
       exit 1
     fi
     printf '%s' "$value"
@@ -392,14 +434,14 @@ prompt_host() {
   fi
 
   while true; do
-    read -r -p "$label: " input
+    read -r -p "$(color_prompt "$label: ")" input
     if [ -z "$input" ]; then
-      echo "$var_name 不能为空。" >&2
+      error "$var_name 不能为空。"
       continue
     fi
     value="$(strip_scheme "$input")"
     if ! is_valid_host "$value"; then
-      echo "无效的域名或 IP,请重新输入。" >&2
+      error "无效的域名或 IP,请重新输入。"
       continue
     fi
     printf '%s' "$value"
@@ -415,7 +457,7 @@ prompt_username() {
 
   if [ -n "$current_value" ]; then
     if ! is_valid_username "$current_value"; then
-      echo "$var_name 无效:只能使用 1-128 位 A-Z a-z 0-9 . _ ~ -" >&2
+      error "$var_name 无效:只能使用 1-128 位 A-Z a-z 0-9 . _ ~ -"
       exit 1
     fi
     printf '%s' "$current_value"
@@ -423,13 +465,13 @@ prompt_username() {
   fi
 
   while true; do
-    read -r -p "$label: " input
+    read -r -p "$(color_prompt "$label: ")" input
     if [ -z "$input" ]; then
-      echo "$var_name 不能为空。" >&2
+      error "$var_name 不能为空。"
       continue
     fi
     if ! is_valid_username "$input"; then
-      echo "用户名无效:只能使用 1-128 位 A-Z a-z 0-9 . _ ~ -,请重新输入。" >&2
+      error "用户名无效:只能使用 1-128 位 A-Z a-z 0-9 . _ ~ -,请重新输入。"
       continue
     fi
     printf '%s' "$input"
@@ -445,7 +487,7 @@ prompt_password() {
 
   if [ -n "$current_value" ]; then
     if ! is_safe_env_value "$current_value"; then
-      echo "$var_name 不能包含换行符、回车或制表符。" >&2
+      error "$var_name 不能包含换行符、回车或制表符。"
       exit 1
     fi
     printf '%s' "$current_value"
@@ -453,14 +495,14 @@ prompt_password() {
   fi
 
   while true; do
-    read -r -s -p "$label: " input
+    read -r -s -p "$(color_prompt "$label: ")" input
     printf '\n' >&2
     if [ -z "$input" ]; then
-      echo "$var_name 不能为空。" >&2
+      error "$var_name 不能为空。"
       continue
     fi
     if ! is_safe_env_value "$input"; then
-      echo "密码不能包含换行符、回车或制表符,请重新输入。" >&2
+      error "密码不能包含换行符、回车或制表符,请重新输入。"
       continue
     fi
     printf '%s' "$input"
@@ -476,7 +518,7 @@ prompt_optional_email() {
 
   if [ -n "$current_value" ]; then
     if ! is_valid_email "$current_value"; then
-      echo "$var_name 无效: $current_value" >&2
+      error "$var_name 无效: $current_value"
       exit 1
     fi
     printf '%s' "$current_value"
@@ -489,13 +531,13 @@ prompt_optional_email() {
   fi
 
   while true; do
-    read -r -p "$label,可留空: " input
+    read -r -p "$(color_prompt "$label,可留空: ")" input
     if [ -z "$input" ]; then
       printf '%s' ""
       return
     fi
     if ! is_valid_email "$input"; then
-      echo "邮箱格式无效,请重新输入。" >&2
+      error "邮箱格式无效,请重新输入。"
       continue
     fi
     printf '%s' "$input"
@@ -512,7 +554,7 @@ prompt_optional_port() {
 
   if [ -n "$current_value" ]; then
     if ! is_valid_port "$current_value"; then
-      echo "$var_name 无效: $current_value" >&2
+      error "$var_name 无效: $current_value"
       exit 1
     fi
     printf '%s' "$current_value"
@@ -525,10 +567,10 @@ prompt_optional_port() {
   fi
 
   while true; do
-    read -r -p "$label [$default_value]: " input
+    read -r -p "$(color_prompt "$label [$default_value]: ")" input
     input="${input:-$default_value}"
     if ! is_valid_port "$input"; then
-      echo "端口必须是 1-65535 之间的整数,请重新输入。" >&2
+      error "端口必须是 1-65535 之间的整数,请重新输入。"
       continue
     fi
     printf '%s' "$input"
@@ -541,12 +583,12 @@ install_base_packages() {
     # shellcheck disable=SC1091
     . /etc/os-release
   else
-    echo "无法识别 Linux 发行版:缺少 /etc/os-release。" >&2
+    error "无法识别 Linux 发行版:缺少 /etc/os-release。"
     exit 1
   fi
 
   echo
-  echo "正在安装基础依赖..."
+  info "正在安装基础依赖..."
 
   case "${ID:-} ${ID_LIKE:-}" in
     *ubuntu*|*debian*)
@@ -559,7 +601,7 @@ install_base_packages() {
       elif command -v yum >/dev/null 2>&1; then
         run_as_root yum install -y ca-certificates curl tar gzip
       else
-        echo "未找到 dnf 或 yum。" >&2
+        error "未找到 dnf 或 yum。"
         exit 1
       fi
       ;;
@@ -567,8 +609,8 @@ install_base_packages() {
       run_as_root apk add --no-cache ca-certificates curl tar gzip shadow
       ;;
     *)
-      echo "暂不支持自动安装依赖的系统:${PRETTY_NAME:-unknown}" >&2
-      echo "请先手动安装 ca-certificates curl tar gzip 后重试。" >&2
+      error "暂不支持自动安装依赖的系统:${PRETTY_NAME:-unknown}"
+      error "请先手动安装 ca-certificates curl tar gzip 后重试。"
       exit 1
       ;;
   esac
@@ -585,7 +627,7 @@ linux_arch() {
       printf '%s' "arm64"
       ;;
     *)
-      echo "暂不支持的架构:$arch" >&2
+      error "暂不支持的架构:$arch"
       return 1
       ;;
   esac
@@ -599,7 +641,7 @@ download_prebuilt_caddy() {
   fi
 
   if ! command -v sha256sum >/dev/null 2>&1; then
-    echo "缺少 sha256sum,无法校验预编译 Caddy,改用本地编译。" >&2
+    warn "缺少 sha256sum,无法校验预编译 Caddy,改用本地编译。"
     return 1
   fi
 
@@ -613,40 +655,40 @@ download_prebuilt_caddy() {
   tmp_bin="$tmp_dir/caddy-forwardproxy"
 
   echo
-  echo "正在下载预编译 Caddy:$asset"
+  info "正在下载预编译 Caddy:$asset"
   if ! curl -fL "$asset_url" -o "$archive"; then
-    echo "预编译 Caddy 下载失败,改用本地编译。" >&2
+    warn "预编译 Caddy 下载失败,改用本地编译。"
     rm -rf "$tmp_dir"
     return 1
   fi
 
   if ! curl -fsSL "$checksum_url" -o "$checksum_file"; then
-    echo "预编译 Caddy 校验和文件下载失败,拒绝使用未经校验的二进制,改用本地编译。" >&2
+    warn "预编译 Caddy 校验和文件下载失败,拒绝使用未经校验的二进制,改用本地编译。"
     rm -rf "$tmp_dir"
     return 1
   fi
 
   if ! (cd "$tmp_dir" && sha256sum -c "$(basename "$checksum_file")" >/dev/null 2>&1); then
-    echo "预编译 Caddy 校验和不匹配,改用本地编译。" >&2
+    warn "预编译 Caddy 校验和不匹配,改用本地编译。"
     rm -rf "$tmp_dir"
     return 1
   fi
 
   if ! tar -C "$tmp_dir" -xzf "$archive"; then
-    echo "预编译 Caddy 解压失败,改用本地编译。" >&2
+    warn "预编译 Caddy 解压失败,改用本地编译。"
     rm -rf "$tmp_dir"
     return 1
   fi
 
   if [ ! -x "$tmp_bin" ]; then
-    echo "预编译 Caddy 包格式不正确,改用本地编译。" >&2
+    warn "预编译 Caddy 包格式不正确,改用本地编译。"
     rm -rf "$tmp_dir"
     return 1
   fi
 
   run_as_root install -m 0755 "$tmp_bin" "$CADDY_BIN"
   rm -rf "$tmp_dir"
-  echo "已安装预编译 Caddy:$CADDY_BIN"
+  success "已安装预编译 Caddy:$CADDY_BIN"
   return 0
 }
 
@@ -677,7 +719,7 @@ select_or_install_go() {
 
   go_version="$(curl -fsSL 'https://go.dev/VERSION?m=text' | sed -n '1p')"
   if ! printf '%s' "$go_version" | grep -Eq '^go1\.[0-9]+(\.[0-9]+)?$'; then
-    echo "获取到的 Go 版本号格式异常: $go_version" >&2
+    error "获取到的 Go 版本号格式异常: $go_version"
     exit 1
   fi
 
@@ -687,7 +729,7 @@ select_or_install_go() {
   extract_dir="$tmp_dir/extract"
 
   echo
-  echo "正在安装 Go:$go_version"
+  info "正在安装 Go:$go_version"
   curl -fL "$url" -o "$tarball"
   run_as_root rm -rf "$GO_ROOT"
   mkdir -p "$extract_dir"
@@ -697,7 +739,7 @@ select_or_install_go() {
 
   GO_BIN="$GO_ROOT/bin/go"
   if [ ! -x "$GO_BIN" ]; then
-    echo "Go 安装失败:$GO_BIN 不存在。" >&2
+    error "Go 安装失败:$GO_BIN 不存在。"
     exit 1
   fi
 }
@@ -708,11 +750,11 @@ install_xcaddy() {
   fi
 
   echo
-  echo "正在安装 xcaddy..."
+  info "正在安装 xcaddy..."
   run_as_root env GOBIN=/usr/local/bin "$GO_BIN" install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
 
   if [ ! -x "$XCADDY_BIN" ]; then
-    echo "xcaddy 安装失败:$XCADDY_BIN 不存在。" >&2
+    error "xcaddy 安装失败:$XCADDY_BIN 不存在。"
     exit 1
   fi
 }
@@ -723,7 +765,7 @@ build_caddy() {
   rm -f "$tmp_bin"
 
   echo
-  echo "正在编译带 forwardproxy 插件的 Caddy..."
+  info "正在编译带 forwardproxy 插件的 Caddy..."
   env XCADDY_WHICH_GO="$GO_BIN" "$XCADDY_BIN" build \
     --output "$tmp_bin" \
     --with github.com/caddyserver/forwardproxy
@@ -737,7 +779,7 @@ ensure_service_user() {
   fi
 
   echo
-  echo "正在创建系统用户 $SERVICE_USER..."
+  info "正在创建系统用户 $SERVICE_USER..."
   if command -v useradd >/dev/null 2>&1; then
     run_as_root useradd \
       --system \
@@ -754,7 +796,7 @@ ensure_service_user() {
       -G "$SERVICE_GROUP" \
       "$SERVICE_USER"
   else
-    echo "无法创建系统用户:系统缺少 useradd / adduser。" >&2
+    error "无法创建系统用户:系统缺少 useradd / adduser。"
     exit 1
   fi
 }
@@ -762,7 +804,7 @@ ensure_service_user() {
 migrate_legacy_install() {
   if systemctl list-unit-files "${LEGACY_SERVICE_NAME}.service" >/dev/null 2>&1 || [ -f "$LEGACY_SERVICE_FILE" ]; then
     echo
-    echo "检测到旧服务 ${LEGACY_SERVICE_NAME},正在迁移到 ${SERVICE_NAME}..."
+    info "检测到旧服务 ${LEGACY_SERVICE_NAME},正在迁移到 ${SERVICE_NAME}..."
     run_as_root systemctl disable --now "$LEGACY_SERVICE_NAME" >/dev/null 2>&1 || true
     run_as_root rm -f "$LEGACY_SERVICE_FILE"
     run_as_root systemctl daemon-reload
@@ -941,12 +983,12 @@ install_stack() {
   write_service
 
   if [ "$SKIP_START" = "true" ]; then
-    echo "已生成配置,按要求未启动服务。"
+    success "已生成配置,按要求未启动服务。"
     exit 0
   fi
 
   echo
-  echo "正在启动 PixelCat ForwardProxy systemd 服务..."
+  info "正在启动 PixelCat ForwardProxy systemd 服务..."
   run_as_root systemctl daemon-reload
   run_as_root systemctl enable "$SERVICE_NAME" >/dev/null
   if systemctl is-active --quiet "$SERVICE_NAME"; then
@@ -956,11 +998,11 @@ install_stack() {
   fi
 
   echo
-  echo "部署完成。"
-  echo "服务状态: systemctl status $SERVICE_NAME --no-pager"
-  echo "代理地址: https://$USERNAME:******@$DOMAIN"
+  success "部署完成。"
+  info "服务状态: systemctl status $SERVICE_NAME --no-pager"
+  info "代理地址: https://$USERNAME:******@$DOMAIN"
   print_sing_box_config
-  echo "查看日志: journalctl -u $SERVICE_NAME -f"
+  info "查看日志: journalctl -u $SERVICE_NAME -f"
 }
 
 uninstall_stack() {
@@ -969,22 +1011,22 @@ uninstall_stack() {
 
   if [ "$ASSUME_YES" != "true" ]; then
     if [ "$PURGE" = "true" ]; then
-      read -r -p "确认卸载 PixelCat ForwardProxy,并删除配置、证书数据、本地 Go 工具和系统用户?[y/N]: " uninstall_confirm
+      read -r -p "$(color_prompt "确认卸载 PixelCat ForwardProxy,并删除配置、证书数据、本地 Go 工具和系统用户?[y/N]: ")" uninstall_confirm
     else
-      read -r -p "确认卸载 PixelCat ForwardProxy 服务?配置和证书数据会保留。[y/N]: " uninstall_confirm
+      read -r -p "$(color_prompt "确认卸载 PixelCat ForwardProxy 服务?配置和证书数据会保留。[y/N]: ")" uninstall_confirm
     fi
     case "$uninstall_confirm" in
       y|Y|yes|YES)
         ;;
       *)
-        echo "已取消。"
+        warn "已取消。"
         exit 0
         ;;
     esac
   fi
 
   echo
-  echo "正在停止并删除 systemd 服务..."
+  info "正在停止并删除 systemd 服务..."
   run_as_root systemctl disable --now "$SERVICE_NAME" >/dev/null 2>&1 || true
   run_as_root systemctl disable --now "$LEGACY_SERVICE_NAME" >/dev/null 2>&1 || true
   run_as_root rm -f "$SERVICE_FILE" "$LEGACY_SERVICE_FILE"
@@ -1004,17 +1046,17 @@ uninstall_stack() {
         run_as_root deluser "$SERVICE_USER" >/dev/null 2>&1 || true
       fi
     fi
-    echo "已删除配置、证书数据、.env、本地 Go 工具和系统用户。"
+    success "已删除配置、证书数据、.env、本地 Go 工具和系统用户。"
   fi
 
-  echo "卸载完成。"
+  success "卸载完成。"
 }
 
 enable_bbr() {
   need_linux
 
   echo
-  echo "正在开启 BBR..."
+  info "正在开启 BBR..."
   cat <<'EOF' | run_as_root tee /etc/sysctl.d/99-pixelcat-bbr.conf >/dev/null
 net.core.default_qdisc=fq
 net.ipv4.tcp_congestion_control=bbr
@@ -1026,9 +1068,9 @@ EOF
   echo "当前队列算法: $(sysctl -n net.core.default_qdisc 2>/dev/null || true)"
 
   if [ "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || true)" = "bbr" ]; then
-    echo "BBR 已开启。"
+    success "BBR 已开启。"
   else
-    echo "BBR 未成功开启,可能是内核不支持。请检查内核版本。" >&2
+    error "BBR 未成功开启,可能是内核不支持。请检查内核版本。"
     exit 1
   fi
 }
@@ -1039,7 +1081,7 @@ DIAGNOSTIC_DEPS_PREPPED="false"
 
 ensure_curl_available() {
   if ! command -v curl >/dev/null 2>&1; then
-    echo "未检测到 curl,正在安装基础依赖..."
+    info "未检测到 curl,正在安装基础依赖..."
     install_base_packages
   fi
 }
@@ -1070,7 +1112,7 @@ ensure_diagnostic_deps() {
   done
 
   if [ -n "$missing" ]; then
-    echo "正在安装诊断脚本依赖: ${missing}"
+    info "正在安装诊断脚本依赖: ${missing}"
     case "${ID:-} ${ID_LIKE:-}" in
       *ubuntu*|*debian*)
         run_as_root apt-get update
@@ -1081,38 +1123,38 @@ ensure_diagnostic_deps() {
           run_as_root dnf install -y jq bind-utils mtr iperf3 bc
           run_as_root dnf install -y epel-release 2>/dev/null || true
           run_as_root dnf install -y ImageMagick 2>/dev/null || \
-            echo "ImageMagick 未能自动安装,IP 质量报告图片可能不可用。" >&2
+            warn "ImageMagick 未能自动安装,IP 质量报告图片可能不可用。"
         elif command -v yum >/dev/null 2>&1; then
           run_as_root yum install -y jq bind-utils mtr iperf3 bc
           run_as_root yum install -y epel-release 2>/dev/null || true
           run_as_root yum install -y ImageMagick 2>/dev/null || \
-            echo "ImageMagick 未能自动安装,IP 质量报告图片可能不可用。" >&2
+            warn "ImageMagick 未能自动安装,IP 质量报告图片可能不可用。"
         else
-          echo "未找到 dnf 或 yum,无法预装诊断依赖。" >&2
+          warn "未找到 dnf 或 yum,无法预装诊断依赖。"
         fi
         ;;
       *alpine*)
         run_as_root apk add --no-cache jq bind-tools mtr iperf3 bc imagemagick
         ;;
       *)
-        echo "暂不支持自动预装诊断依赖的系统: ${PRETTY_NAME:-unknown}" >&2
-        echo "请先手动安装 jq dig mtr iperf3 bc imagemagick,然后重试。" >&2
+        warn "暂不支持自动预装诊断依赖的系统: ${PRETTY_NAME:-unknown}"
+        warn "请先手动安装 jq dig mtr iperf3 bc imagemagick,然后重试。"
         ;;
     esac
   fi
 
   if ! command -v nexttrace >/dev/null 2>&1; then
-    echo "正在安装 nexttrace(回程路由检测依赖)..."
+    info "正在安装 nexttrace(回程路由检测依赖)..."
     local nt_script
     if nt_script="$(mktemp -t pixelcat-nt.XXXXXX)"; then
       if curl -fsSL https://nxtrace.org/nt -o "$nt_script" && [ -s "$nt_script" ]; then
-        bash "$nt_script" || echo "nexttrace 安装脚本返回失败,回程路由检测可能不可用。" >&2
+        bash "$nt_script" || warn "nexttrace 安装脚本返回失败,回程路由检测可能不可用。"
       else
-        echo "下载 nexttrace 安装脚本失败,回程路由检测可能不可用。" >&2
+        warn "下载 nexttrace 安装脚本失败,回程路由检测可能不可用。"
       fi
       rm -f "$nt_script"
     else
-      echo "无法创建临时文件,跳过 nexttrace 安装。" >&2
+      warn "无法创建临时文件,跳过 nexttrace 安装。"
     fi
   fi
 
@@ -1129,24 +1171,24 @@ run_remote_diagnostic() {
   ensure_curl_available
 
   echo
-  echo "===== ${title} ====="
-  echo "来源: ${source_url}"
+  printf '%b===== %s =====%b\n' "${C_BOLD}${C_MAGENTA}" "$title" "$C_RESET"
+  info "来源: ${source_url}"
   if [ "$(id -u)" -ne 0 ]; then
-    echo "提示: 当前非 root 用户,部分子项(如 mtr / 路由探测)可能无法运行,可考虑使用 sudo 重新运行。"
+    warn "提示: 当前非 root 用户,部分子项(如 mtr / 路由探测)可能无法运行,可考虑使用 sudo 重新运行。"
   fi
   echo "----------------------------------------"
 
   local tmp_script
   if ! tmp_script="$(mktemp -t pixelcat-diag.XXXXXX)"; then
-    echo "无法创建临时文件,无法继续。" >&2
+    error "无法创建临时文件,无法继续。"
     return 1
   fi
   trap 'rm -f "$tmp_script"' EXIT
 
   if ! curl -fsSL "$fetch_url" -o "$tmp_script"; then
     echo "----------------------------------------"
-    echo "下载远程脚本失败: ${fetch_url}" >&2
-    echo "请检查网络连通性后重试。" >&2
+    error "下载远程脚本失败: ${fetch_url}"
+    error "请检查网络连通性后重试。"
     rm -f "$tmp_script"
     trap - EXIT
     return 1
@@ -1154,7 +1196,7 @@ run_remote_diagnostic() {
 
   if [ ! -s "$tmp_script" ]; then
     echo "----------------------------------------"
-    echo "远程脚本下载结果为空: ${fetch_url}" >&2
+    error "远程脚本下载结果为空: ${fetch_url}"
     rm -f "$tmp_script"
     trap - EXIT
     return 1
@@ -1168,10 +1210,10 @@ run_remote_diagnostic() {
 
   echo "----------------------------------------"
   if [ "$rc" -ne 0 ]; then
-    echo "${title} 执行返回码 ${rc},如系网络问题请稍后重试。" >&2
+    error "${title} 执行返回码 ${rc},如系网络问题请稍后重试。"
     return "$rc"
   fi
-  echo "${title} 完成。"
+  success "${title} 完成。"
 }
 
 run_ip_quality() {
@@ -1238,7 +1280,7 @@ prompt_optional_mbps() {
 
   if [ -n "$current_value" ]; then
     if ! is_valid_mbps "$current_value"; then
-      echo "$var_name 无效:必须是 0-99999 的整数。" >&2
+      error "$var_name 无效:必须是 0-99999 的整数。"
       exit 1
     fi
     printf '%s' "$current_value"
@@ -1251,10 +1293,10 @@ prompt_optional_mbps() {
   fi
 
   while true; do
-    read -r -p "$label [$default_value]: " input
+    read -r -p "$(color_prompt "$label [$default_value]: ")" input
     input="${input:-$default_value}"
     if ! is_valid_mbps "$input"; then
-      echo "请输入 0-99999 的整数(0 表示不限速)。" >&2
+      error "请输入 0-99999 的整数(0 表示不限速)。"
       continue
     fi
     printf '%s' "$input"
@@ -1271,7 +1313,7 @@ prompt_optional_hop_range() {
       return
     fi
     if ! is_valid_hop_range "$current_value"; then
-      echo "$var_name 无效:应为 start-end 格式,例如 20000-50000。" >&2
+      error "$var_name 无效:应为 start-end 格式,例如 20000-50000。"
       exit 1
     fi
     printf '%s' "$current_value"
@@ -1284,14 +1326,14 @@ prompt_optional_hop_range() {
   fi
 
   while true; do
-    read -r -p "$label [$default_value,输入 off 关闭]: " input
+    read -r -p "$(color_prompt "$label [$default_value,输入 off 关闭]: ")" input
     input="${input:-$default_value}"
     if [ "$input" = "off" ] || [ "$input" = "OFF" ]; then
       printf '%s' ""
       return
     fi
     if ! is_valid_hop_range "$input"; then
-      echo "请输入 start-end 格式,例如 20000-50000。" >&2
+      error "请输入 start-end 格式,例如 20000-50000。"
       continue
     fi
     printf '%s' "$input"
@@ -1304,7 +1346,7 @@ prompt_optional_url() {
 
   if [ -n "$current_value" ]; then
     if ! is_valid_url "$current_value"; then
-      echo "$var_name 无效:必须以 http:// 或 https:// 开头。" >&2
+      error "$var_name 无效:必须以 http:// 或 https:// 开头。"
       exit 1
     fi
     printf '%s' "$current_value"
@@ -1317,10 +1359,10 @@ prompt_optional_url() {
   fi
 
   while true; do
-    read -r -p "$label [$default_value]: " input
+    read -r -p "$(color_prompt "$label [$default_value]: ")" input
     input="${input:-$default_value}"
     if ! is_valid_url "$input"; then
-      echo "URL 无效,必须以 http:// 或 https:// 开头。" >&2
+      error "URL 无效,必须以 http:// 或 https:// 开头。"
       continue
     fi
     printf '%s' "$input"
@@ -1337,7 +1379,7 @@ install_hop_packages() {
   fi
 
   echo
-  echo "正在安装 nftables..."
+  info "正在安装 nftables..."
   if command -v apt-get >/dev/null 2>&1; then
     run_as_root apt-get install -y nftables
   elif command -v dnf >/dev/null 2>&1; then
@@ -1349,7 +1391,7 @@ install_hop_packages() {
   fi
 
   if ! command -v nft >/dev/null 2>&1 && ! command -v iptables >/dev/null 2>&1; then
-    echo "未能安装 nftables/iptables,无法启用端口跳跃。" >&2
+    error "未能安装 nftables/iptables,无法启用端口跳跃。"
     return 1
   fi
 }
@@ -1358,7 +1400,7 @@ download_hysteria2() {
   local arch asset asset_url hashes_url tmp_dir bin_file hashes_file expected actual
 
   if ! command -v sha256sum >/dev/null 2>&1; then
-    echo "缺少 sha256sum,无法校验 Hysteria2 二进制。" >&2
+    error "缺少 sha256sum,无法校验 Hysteria2 二进制。"
     return 1
   fi
 
@@ -1371,15 +1413,15 @@ download_hysteria2() {
   hashes_file="$tmp_dir/hashes.txt"
 
   echo
-  echo "正在下载 Hysteria2:$asset"
+  info "正在下载 Hysteria2:$asset"
   if ! curl -fL "$asset_url" -o "$bin_file"; then
-    echo "Hysteria2 下载失败。" >&2
+    error "Hysteria2 下载失败。"
     rm -rf "$tmp_dir"
     return 1
   fi
 
   if ! curl -fsSL "$hashes_url" -o "$hashes_file"; then
-    echo "Hysteria2 hashes.txt 下载失败,拒绝安装未经校验的二进制。" >&2
+    error "Hysteria2 hashes.txt 下载失败,拒绝安装未经校验的二进制。"
     rm -rf "$tmp_dir"
     return 1
   fi
@@ -1387,14 +1429,14 @@ download_hysteria2() {
   # hashes.txt 行格式:<sha256>  build/<asset>
   expected="$(awk -v t="build/$asset" '$2 == t {print $1; exit}' "$hashes_file")"
   if [ -z "$expected" ]; then
-    echo "Hysteria2 hashes.txt 中没有 $asset 的校验和。" >&2
+    error "Hysteria2 hashes.txt 中没有 $asset 的校验和。"
     rm -rf "$tmp_dir"
     return 1
   fi
 
   actual="$(sha256sum "$bin_file" | awk '{print $1}')"
   if [ "$expected" != "$actual" ]; then
-    echo "Hysteria2 校验和不匹配(expected $expected, got $actual)。" >&2
+    error "Hysteria2 校验和不匹配(expected $expected, got $actual)。"
     rm -rf "$tmp_dir"
     return 1
   fi
@@ -1402,7 +1444,7 @@ download_hysteria2() {
   chmod +x "$bin_file"
   run_as_root install -m 0755 "$bin_file" "$HY2_BIN"
   rm -rf "$tmp_dir"
-  echo "已安装 Hysteria2:$HY2_BIN"
+  success "已安装 Hysteria2:$HY2_BIN"
 }
 
 HY2_USE_ACME="true"
@@ -1677,7 +1719,7 @@ install_hysteria2() {
   ensure_service_user
 
   if ! download_hysteria2; then
-    echo "Hysteria2 安装失败。" >&2
+    error "Hysteria2 安装失败。"
     exit 1
   fi
 
@@ -1698,12 +1740,12 @@ install_hysteria2() {
   apply_hysteria2_sysctl
 
   if [ "$SKIP_START" = "true" ]; then
-    echo "已生成 Hysteria2 配置,按要求未启动服务。"
+    success "已生成 Hysteria2 配置,按要求未启动服务。"
     exit 0
   fi
 
   echo
-  echo "正在启动 Hysteria2 systemd 服务..."
+  info "正在启动 Hysteria2 systemd 服务..."
   run_as_root systemctl daemon-reload
   if [ -n "$HY2_HOP_RANGE" ]; then
     run_as_root systemctl enable "$HY2_HOP_SERVICE_NAME" >/dev/null
@@ -1721,17 +1763,17 @@ install_hysteria2() {
   fi
 
   echo
-  echo "Hysteria2 部署完成。"
-  echo "服务状态: systemctl status $HY2_SERVICE_NAME --no-pager"
-  echo "查看日志: journalctl -u $HY2_SERVICE_NAME -f"
+  success "Hysteria2 部署完成。"
+  info "服务状态: systemctl status $HY2_SERVICE_NAME --no-pager"
+  info "查看日志: journalctl -u $HY2_SERVICE_NAME -f"
   if [ -n "$HY2_HOP_RANGE" ]; then
-    echo "端口跳跃: $HY2_HOP_RANGE/udp → :$HY2_PORT/udp(网卡:$HY2_HOP_IFACE)"
+    info "端口跳跃: $HY2_HOP_RANGE/udp → :$HY2_PORT/udp(网卡:$HY2_HOP_IFACE)"
   fi
   if [ "$HY2_USE_ACME" = "true" ]; then
-    echo "证书来源: Hysteria2 自申请 (ACME),数据保存在 $HY2_DATA_DIR/acme"
-    echo "提示:Hysteria2 ACME 默认会用 443/tcp 完成 ALPN-01 校验,请确认该端口未被占用。"
+    info "证书来源: Hysteria2 自申请 (ACME),数据保存在 $HY2_DATA_DIR/acme"
+    warn "提示:Hysteria2 ACME 默认会用 443/tcp 完成 ALPN-01 校验,请确认该端口未被占用。"
   else
-    echo "证书来源: 复用 Caddy 已签发的 $HY2_DOMAIN 证书"
+    info "证书来源: 复用 Caddy 已签发的 $HY2_DOMAIN 证书"
   fi
   print_hysteria2_client_config
 }
@@ -1742,18 +1784,18 @@ uninstall_hysteria2() {
 
   if [ "$ASSUME_YES" != "true" ]; then
     if [ "$PURGE" = "true" ]; then
-      read -r -p "确认卸载 Hysteria2,并删除配置、证书数据和系统用户?[y/N]: " ans
+      read -r -p "$(color_prompt "确认卸载 Hysteria2,并删除配置、证书数据和系统用户?[y/N]: ")" ans
     else
-      read -r -p "确认卸载 Hysteria2 服务?配置和证书数据会保留。[y/N]: " ans
+      read -r -p "$(color_prompt "确认卸载 Hysteria2 服务?配置和证书数据会保留。[y/N]: ")" ans
     fi
     case "$ans" in
       y|Y|yes|YES) ;;
-      *) echo "已取消。"; exit 0 ;;
+      *) warn "已取消。"; exit 0 ;;
     esac
   fi
 
   echo
-  echo "正在停止并删除 Hysteria2 systemd 服务..."
+  info "正在停止并删除 Hysteria2 systemd 服务..."
   run_as_root systemctl disable --now "$HY2_SERVICE_NAME" >/dev/null 2>&1 || true
   run_as_root systemctl disable --now "$HY2_HOP_SERVICE_NAME" >/dev/null 2>&1 || true
   run_as_root rm -f "$HY2_SERVICE_FILE" "$HY2_HOP_SERVICE_FILE"
@@ -1773,10 +1815,10 @@ uninstall_hysteria2() {
         run_as_root deluser "$SERVICE_USER" >/dev/null 2>&1 || true
       fi
     fi
-    echo "已删除 Hysteria2 配置、证书和 .env.hysteria2。"
+    success "已删除 Hysteria2 配置、证书和 .env.hysteria2。"
   fi
 
-  echo "Hysteria2 卸载完成。"
+  success "Hysteria2 卸载完成。"
 }
 
 do_install_hysteria2() {
@@ -1805,15 +1847,15 @@ do_install_hysteria2() {
   if [ -z "$HY2_PASSWORD" ]; then
     if [ -n "$PASSWORD" ]; then
       HY2_PASSWORD="$PASSWORD"
-      echo "Hysteria2 密码默认沿用 ForwardProxy 密码。"
+      info "Hysteria2 密码默认沿用 ForwardProxy 密码。"
     else
       local generated keep
       generated="$(generate_password)"
       if [ "$ASSUME_YES" = "true" ] || [ ! -r /dev/tty ]; then
         HY2_PASSWORD="$generated"
-        echo "已自动生成 Hysteria2 密码:$HY2_PASSWORD"
+        success "已自动生成 Hysteria2 密码:$HY2_PASSWORD"
       else
-        read -r -p "请输入 Hysteria2 密码 [回车使用随机密码 $generated]: " keep
+        read -r -p "$(color_prompt "请输入 Hysteria2 密码 [回车使用随机密码 $generated]: ")" keep
         HY2_PASSWORD="${keep:-$generated}"
       fi
     fi
@@ -1828,10 +1870,10 @@ do_install_hysteria2() {
     if [ -z "$HY2_HOP_IFACE" ]; then
       HY2_HOP_IFACE="$(detect_default_iface)"
       if [ -z "$HY2_HOP_IFACE" ]; then
-        echo "无法自动检测默认网卡,请用 --hy2-hop-iface 指定,或输入 off 关闭端口跳跃。" >&2
+        error "无法自动检测默认网卡,请用 --hy2-hop-iface 指定,或输入 off 关闭端口跳跃。"
         exit 1
       fi
-      echo "默认网卡:$HY2_HOP_IFACE"
+      info "默认网卡:$HY2_HOP_IFACE"
     fi
   fi
 
@@ -1843,22 +1885,22 @@ do_install_hysteria2() {
   HY2_MASQUERADE_URL="$(prompt_optional_url HY2_MASQUERADE_URL "请输入伪装 URL" "$HY2_MASQUERADE_URL" "$HY2_DEFAULT_MASQUERADE_URL")"
 
   if [ "$HY2_PASSWORD_FROM_ARG" = "true" ]; then
-    echo "警告:通过 --hy2-password 传入密码可能会被 shell 历史或进程列表记录。" >&2
+    warn "警告:通过 --hy2-password 传入密码可能会被 shell 历史或进程列表记录。"
   fi
 
   for value_name in HY2_DOMAIN HY2_PASSWORD HY2_PORT HY2_HOP_RANGE HY2_HOP_IFACE HY2_UP_MBPS HY2_DOWN_MBPS HY2_MASQUERADE_URL; do
     value="$(eval "printf '%s' \"\${$value_name}\"")"
     if ! is_safe_env_value "$value"; then
-      echo "$value_name 不能包含换行符、回车或制表符。" >&2
+      error "$value_name 不能包含换行符、回车或制表符。"
       exit 1
     fi
   done
 
   if [ -f ".env.hysteria2" ] && [ "$ASSUME_YES" != "true" ]; then
-    read -r -p ".env.hysteria2 已存在,是否覆盖?[y/N]: " overwrite
+    read -r -p "$(color_prompt ".env.hysteria2 已存在,是否覆盖?[y/N]: ")" overwrite
     case "$overwrite" in
       y|Y|yes|YES) ;;
-      *) echo "已取消。"; exit 0 ;;
+      *) warn "已取消。"; exit 0 ;;
     esac
   fi
 
@@ -1875,7 +1917,7 @@ do_install_hysteria2() {
 
   chmod 600 .env.hysteria2
   echo
-  echo ".env.hysteria2 已写入。"
+  success ".env.hysteria2 已写入。"
 
   install_hysteria2
 }
@@ -1884,8 +1926,8 @@ show_menu() {
   local choice
 
   while true; do
+    printf '\n%b' "$C_CYAN"
     cat <<'MENU'
-
      ██        ██
     ██████████████
     ██  ██  ██  ██
@@ -1894,29 +1936,25 @@ show_menu() {
     ██   ●●     ██
     ██  ██████  ██
      ████████████
-
-PixelCat 一键脚本(ForwardProxy + Hysteria2)
-
-像素猫 - 科学上网ICU
-中文教程博客,整理科学上网、网络诊断、节点维护与隐私安全的实用经验。
-
-官网: https://pixelcat.icu
-YouTube: https://www.youtube.com/@PixelCatICU
-GitHub: https://github.com/PixelCatICU
-X: https://x.com/PixelCatICU
-
-1) 安装 / 更新 PixelCat ForwardProxy
-2) 安装 / 更新 PixelCat Hysteria2
-3) 卸载 PixelCat ForwardProxy
-4) 卸载 PixelCat Hysteria2
-5) 一键开启 BBR
-6) IP 质量检测           (xykt/IPQuality)
-7) 流媒体解锁检测         (lmc999/RegionRestrictionCheck)
-8) 网络质量 / 回程检测     (xykt/NetQuality)
-0) 退出
-
 MENU
-    read -r -p "请输入选项 [1-8/0]: " choice
+    printf '%b\n\n' "$C_RESET"
+    printf '%bPixelCat 一键脚本(ForwardProxy + Hysteria2)%b\n\n' "${C_BOLD}${C_MAGENTA}" "$C_RESET"
+    printf '%b像素猫 - 科学上网ICU%b\n' "${C_BOLD}${C_GREEN}" "$C_RESET"
+    printf '%b中文教程博客,整理科学上网、网络诊断、节点维护与隐私安全的实用经验。%b\n\n' "$C_DIM" "$C_RESET"
+    printf '%b官网:%b %s\n' "$C_YELLOW" "$C_RESET" "https://pixelcat.icu"
+    printf '%bYouTube:%b %s\n' "$C_YELLOW" "$C_RESET" "https://www.youtube.com/@PixelCatICU"
+    printf '%bGitHub:%b %s\n' "$C_YELLOW" "$C_RESET" "https://github.com/PixelCatICU"
+    printf '%bX:%b %s\n\n' "$C_YELLOW" "$C_RESET" "https://x.com/PixelCatICU"
+    printf '%b1)%b 安装 / 更新 PixelCat ForwardProxy\n' "$C_GREEN" "$C_RESET"
+    printf '%b2)%b 安装 / 更新 PixelCat Hysteria2\n' "$C_GREEN" "$C_RESET"
+    printf '%b3)%b 卸载 PixelCat ForwardProxy\n' "$C_RED" "$C_RESET"
+    printf '%b4)%b 卸载 PixelCat Hysteria2\n' "$C_RED" "$C_RESET"
+    printf '%b5)%b 一键开启 BBR\n' "$C_BLUE" "$C_RESET"
+    printf '%b6)%b IP 质量检测           %b(xykt/IPQuality)%b\n' "$C_BLUE" "$C_RESET" "$C_DIM" "$C_RESET"
+    printf '%b7)%b 流媒体解锁检测         %b(lmc999/RegionRestrictionCheck)%b\n' "$C_BLUE" "$C_RESET" "$C_DIM" "$C_RESET"
+    printf '%b8)%b 网络质量 / 回程检测     %b(xykt/NetQuality)%b\n' "$C_BLUE" "$C_RESET" "$C_DIM" "$C_RESET"
+    printf '%b0)%b 退出\n\n' "$C_DIM" "$C_RESET"
+    read -r -p "$(color_prompt "请输入选项 [1-8/0]: ")" choice
     case "$choice" in
       1)
         ACTION="install"
@@ -1929,7 +1967,7 @@ MENU
       3)
         ACTION="uninstall"
         if [ "$ASSUME_YES" != "true" ]; then
-          read -r -p "是否同时删除配置和证书数据?[y/N]: " purge_confirm
+          read -r -p "$(color_prompt "是否同时删除配置和证书数据?[y/N]: ")" purge_confirm
           case "$purge_confirm" in
             y|Y|yes|YES)
               PURGE="true"
@@ -1941,7 +1979,7 @@ MENU
       4)
         ACTION="uninstall-hysteria2"
         if [ "$ASSUME_YES" != "true" ]; then
-          read -r -p "是否同时删除 Hysteria2 配置和证书数据?[y/N]: " purge_confirm
+          read -r -p "$(color_prompt "是否同时删除 Hysteria2 配置和证书数据?[y/N]: ")" purge_confirm
           case "$purge_confirm" in
             y|Y|yes|YES)
               PURGE="true"
@@ -1967,11 +2005,11 @@ MENU
         return
         ;;
       0)
-        echo "已退出。"
+        success "已退出。"
         exit 0
         ;;
       *)
-        echo "无效选项。"
+        error "无效选项。"
         ;;
     esac
   done
@@ -2025,30 +2063,30 @@ HTTP_PORT="$(prompt_optional_port HTTP_PORT "请输入 HTTP 端口" "$HTTP_PORT"
 HTTPS_PORT="$(prompt_optional_port HTTPS_PORT "请输入 HTTPS 端口" "$HTTPS_PORT" "443")"
 
 if [ "$PASSWORD_FROM_ARG" = "true" ]; then
-  echo "警告:通过 --password 传入密码可能会被 shell 历史或进程列表记录。" >&2
-  echo "生产环境更推荐运行 ./deploy.sh 后交互式输入密码。" >&2
+  warn "警告:通过 --password 传入密码可能会被 shell 历史或进程列表记录。"
+  warn "生产环境更推荐运行 ./deploy.sh 后交互式输入密码。"
 fi
 
 if [ "$DOMAIN" = "$DECOY_DOMAIN" ]; then
-  echo "代理域名和伪装网站域名不能相同。" >&2
+  error "代理域名和伪装网站域名不能相同。"
   exit 1
 fi
 
 for value_name in DOMAIN USERNAME PASSWORD DECOY_DOMAIN EMAIL HTTP_PORT HTTPS_PORT; do
   value="$(eval "printf '%s' \"\${$value_name}\"")"
   if ! is_safe_env_value "$value"; then
-    echo "$value_name 不能包含换行符、回车或制表符。" >&2
+    error "$value_name 不能包含换行符、回车或制表符。"
     exit 1
   fi
 done
 
 if [ -f ".env" ] && [ "$ASSUME_YES" != "true" ]; then
-  read -r -p ".env 已存在,是否覆盖?[y/N]: " overwrite
+  read -r -p "$(color_prompt ".env 已存在,是否覆盖?[y/N]: ")" overwrite
   case "$overwrite" in
     y|Y|yes|YES)
       ;;
     *)
-      echo "已取消。"
+      warn "已取消。"
       exit 0
       ;;
   esac
@@ -2067,6 +2105,6 @@ fi
 chmod 600 .env
 
 echo
-echo ".env 已写入。"
+success ".env 已写入。"
 
 install_stack
