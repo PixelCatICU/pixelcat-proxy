@@ -95,6 +95,28 @@ error() {
   printf '%b%s%b\n' "$C_RED" "$1" "$C_RESET" >&2
 }
 
+big_title() {
+  printf '%b' "${C_BOLD}${C_MAGENTA}"
+  cat <<'TITLE'
+██████╗ ██╗██╗  ██╗███████╗██╗      ██████╗ █████╗ ████████╗
+██╔══██╗██║╚██╗██╔╝██╔════╝██║     ██╔════╝██╔══██╗╚══██╔══╝
+██████╔╝██║ ╚███╔╝ █████╗  ██║     ██║     ███████║   ██║
+██╔═══╝ ██║ ██╔██╗ ██╔══╝  ██║     ██║     ██╔══██║   ██║
+██║     ██║██╔╝ ██╗███████╗███████╗╚██████╗██║  ██║   ██║
+╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝ ╚═════╝╚═╝  ╚═╝   ╚═╝
+TITLE
+  printf '%b' "$C_RESET"
+}
+
+section_title() {
+  local title="$1"
+  printf '%b\n' "${C_BOLD}${C_MAGENTA}"
+  printf '╔════════════════════════════════════════════════════════════╗\n'
+  printf '  %s\n' "$title"
+  printf '╚════════════════════════════════════════════════════════════╝\n'
+  printf '%b' "$C_RESET"
+}
+
 usage() {
   cat <<'USAGE'
 PixelCat 一键脚本(ForwardProxy + Hysteria2)
@@ -1171,7 +1193,7 @@ run_remote_diagnostic() {
   ensure_curl_available
 
   echo
-  printf '%b===== %s =====%b\n' "${C_BOLD}${C_MAGENTA}" "$title" "$C_RESET"
+  section_title "$title"
   info "来源: ${source_url}"
   if [ "$(id -u)" -ne 0 ]; then
     warn "提示: 当前非 root 用户,部分子项(如 mtr / 路由探测)可能无法运行,可考虑使用 sudo 重新运行。"
@@ -1938,7 +1960,8 @@ show_menu() {
      ████████████
 MENU
     printf '%b\n\n' "$C_RESET"
-    printf '%bPixelCat 一键脚本(ForwardProxy + Hysteria2)%b\n\n' "${C_BOLD}${C_MAGENTA}" "$C_RESET"
+    big_title
+    printf '%b一键脚本(ForwardProxy + Hysteria2)%b\n\n' "${C_BOLD}${C_MAGENTA}" "$C_RESET"
     printf '%b像素猫 - 科学上网ICU%b\n' "${C_BOLD}${C_GREEN}" "$C_RESET"
     printf '%b中文教程博客,整理科学上网、网络诊断、节点维护与隐私安全的实用经验。%b\n\n' "$C_DIM" "$C_RESET"
     printf '%b官网:%b %s\n' "$C_YELLOW" "$C_RESET" "https://pixelcat.icu"
