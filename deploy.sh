@@ -14,16 +14,19 @@ PASSWORD_FROM_ARG="false"
 ACTION="menu"
 PURGE="false"
 
-SERVICE_NAME="pixelcat-forwardproxy"
-LEGACY_SERVICE_NAME="pixelcat-naiveproxy"
-INSTALL_DIR="/etc/pixelcat-forwardproxy"
-DATA_DIR="/var/lib/pixelcat-forwardproxy"
-LEGACY_INSTALL_DIR="/etc/pixelcat-naiveproxy"
-LEGACY_DATA_DIR="/var/lib/pixelcat-naiveproxy"
-CADDY_BIN="/usr/local/bin/caddy-forwardproxy"
-LEGACY_CADDY_BIN="/usr/local/bin/caddy-naiveproxy"
+SERVICE_NAME="pixelcat-caddy"
+INSTALL_DIR="/etc/pixelcat-caddy"
+DATA_DIR="/var/lib/pixelcat-caddy"
+CADDY_BIN="/usr/local/bin/pixelcat-caddy"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-LEGACY_SERVICE_FILE="/etc/systemd/system/${LEGACY_SERVICE_NAME}.service"
+NAIVE_SERVICE_NAME="pixelcat-naiveproxy"
+NAIVE_SERVICE_FILE="/etc/systemd/system/${NAIVE_SERVICE_NAME}.service"
+NAIVE_INSTALL_DIR="/etc/pixelcat-naiveproxy"
+NAIVE_DATA_DIR="/var/lib/pixelcat-naiveproxy"
+NAIVE_BIN="/usr/local/bin/pixelcat-naiveproxy"
+NAIVE_RELEASE_BASE_URL="${NAIVE_RELEASE_BASE_URL:-https://api.github.com/repos/klzgrad/naiveproxy/releases/latest}"
+NAIVE_LISTEN_HOST="${NAIVE_LISTEN_HOST:-127.0.0.1}"
+NAIVE_LISTEN_PORT="${NAIVE_LISTEN_PORT:-8080}"
 SERVICE_USER="pixelcat-proxy"
 SERVICE_GROUP="pixelcat-proxy"
 GO_ROOT="/usr/local/go-pixelcat"
@@ -119,26 +122,25 @@ section_title() {
 
 usage() {
   cat <<'USAGE'
-PixelCat 一键脚本(ForwardProxy + Hysteria2)
+PixelCat 一键脚本(NaiveProxy + Hysteria2)
 
 用法:
   ./deploy.sh                          显示中文菜单
-  ./deploy.sh --install                安装或更新 PixelCat ForwardProxy
+  ./deploy.sh --install                安装或更新 PixelCat NaiveProxy
   ./deploy.sh --install-hysteria2      安装或更新 PixelCat Hysteria2
-  ./deploy.sh --uninstall              卸载 PixelCat ForwardProxy
+  ./deploy.sh --uninstall              卸载 PixelCat NaiveProxy
   ./deploy.sh --uninstall-hysteria2    卸载 PixelCat Hysteria2
   ./deploy.sh --bbr                    一键开启 BBR
   ./deploy.sh --ip-quality             运行 IP 质量检测
   ./deploy.sh --unlock-check           运行流媒体解锁检测
   ./deploy.sh --net-quality            运行网络质量 / 回程检测
-
 通用选项:
       --purge           配合 --uninstall* 一起删除配置、证书数据和系统用户
   -y, --yes             自动确认覆盖配置
       --skip-start      只生成配置,不启动服务
   -h, --help            显示帮助
 
-ForwardProxy 选项:
+NaiveProxy 选项:
   -d, --domain          代理域名,必填
   -u, --username        代理用户名,必填
   -p, --password        代理密码,必填
@@ -150,7 +152,7 @@ ForwardProxy 选项:
                         跳过预编译下载,本地编译 Caddy
 
 Hysteria2 选项:
-      --hy2-domain      Hysteria2 域名,留空沿用 ForwardProxy 域名
+      --hy2-domain      Hysteria2 域名,留空沿用 NaiveProxy 域名
       --hy2-password    Hysteria2 客户端密码,留空自动生成
       --hy2-port        监听 UDP 端口,默认 443
       --hy2-hop-range   端口跳跃范围,例如 20000-50000;传 "off" 禁用
@@ -401,6 +403,18 @@ load_env_value() {
   )
 }
 
+load_naive_env_defaults() {
+  local key value
+  [ -f ".env" ] || return
+
+  for key in DOMAIN USERNAME PASSWORD DECOY_DOMAIN EMAIL HTTP_PORT HTTPS_PORT; do
+    value="$(load_env_value ".env" "$key")"
+    if [ -n "$value" ] && [ -z "$(eval "printf '%s' \"\${$key}\"")" ]; then
+      printf -v "$key" '%s' "$value"
+    fi
+  done
+}
+
 json_escape() {
   printf '%s' "$1" | awk '
     BEGIN { ORS = "" }
@@ -419,10 +433,6 @@ json_escape() {
       }
     }
   '
-}
-
-caddy_escape() {
-  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
 need_linux() {
@@ -453,6 +463,11 @@ prompt_host() {
     fi
     printf '%s' "$value"
     return
+  fi
+
+  if [ "$ASSUME_YES" = "true" ] || [ ! -t 0 ]; then
+    error "$var_name 不能为空。请通过参数或 .env 提供。"
+    exit 1
   fi
 
   while true; do
@@ -486,6 +501,11 @@ prompt_username() {
     return
   fi
 
+  if [ "$ASSUME_YES" = "true" ] || [ ! -t 0 ]; then
+    error "$var_name 不能为空。请通过参数或 .env 提供。"
+    exit 1
+  fi
+
   while true; do
     read -r -p "$(color_prompt "$label: ")" input
     if [ -z "$input" ]; then
@@ -514,6 +534,11 @@ prompt_password() {
     fi
     printf '%s' "$current_value"
     return
+  fi
+
+  if [ "$ASSUME_YES" = "true" ] || [ ! -t 0 ]; then
+    error "$var_name 不能为空。请通过参数或 .env 提供。"
+    exit 1
   fi
 
   while true; do
@@ -615,24 +640,24 @@ install_base_packages() {
   case "${ID:-} ${ID_LIKE:-}" in
     *ubuntu*|*debian*)
       run_as_root apt-get update
-      run_as_root apt-get install -y ca-certificates curl tar gzip
+      run_as_root apt-get install -y ca-certificates curl tar gzip xz-utils
       ;;
     *centos*|*rhel*|*rocky*|*almalinux*|*fedora*)
       if command -v dnf >/dev/null 2>&1; then
-        run_as_root dnf install -y ca-certificates curl tar gzip
+        run_as_root dnf install -y ca-certificates curl tar gzip xz
       elif command -v yum >/dev/null 2>&1; then
-        run_as_root yum install -y ca-certificates curl tar gzip
+        run_as_root yum install -y ca-certificates curl tar gzip xz
       else
         error "未找到 dnf 或 yum。"
         exit 1
       fi
       ;;
     *alpine*)
-      run_as_root apk add --no-cache ca-certificates curl tar gzip shadow
+      run_as_root apk add --no-cache ca-certificates curl tar gzip xz shadow
       ;;
     *)
       error "暂不支持自动安装依赖的系统:${PRETTY_NAME:-unknown}"
-      error "请先手动安装 ca-certificates curl tar gzip 后重试。"
+      error "请先手动安装 ca-certificates curl tar gzip xz 后重试。"
       exit 1
       ;;
   esac
@@ -655,6 +680,23 @@ linux_arch() {
   esac
 }
 
+naive_linux_arch() {
+  local arch
+  arch="$(uname -m)"
+  case "$arch" in
+    x86_64|amd64)
+      printf '%s' "x64"
+      ;;
+    aarch64|arm64)
+      printf '%s' "arm64"
+      ;;
+    *)
+      error "官方 NaiveProxy 暂不支持当前脚本映射的架构:$arch"
+      return 1
+      ;;
+  esac
+}
+
 download_prebuilt_caddy() {
   local arch asset asset_url checksum_url tmp_dir archive checksum_file tmp_bin
 
@@ -663,54 +705,54 @@ download_prebuilt_caddy() {
   fi
 
   if ! command -v sha256sum >/dev/null 2>&1; then
-    warn "缺少 sha256sum,无法校验预编译 Caddy,改用本地编译。"
+    warn "缺少 sha256sum,无法校验预编译 PixelCat Caddy,改用本地编译。"
     return 1
   fi
 
   arch="$(linux_arch)" || return 1
-  asset="caddy-forwardproxy-linux-${arch}.tar.gz"
+  asset="pixelcat-caddy-linux-${arch}.tar.gz"
   asset_url="${RELEASE_BASE_URL}/${asset}"
   checksum_url="${asset_url}.sha256"
   tmp_dir="$(mktemp -d)"
   archive="$tmp_dir/$asset"
   checksum_file="$tmp_dir/$asset.sha256"
-  tmp_bin="$tmp_dir/caddy-forwardproxy"
+  tmp_bin="$tmp_dir/pixelcat-caddy"
 
   echo
-  info "正在下载预编译 Caddy:$asset"
+  info "正在下载预编译 PixelCat Caddy:$asset"
   if ! curl -fL "$asset_url" -o "$archive"; then
-    warn "预编译 Caddy 下载失败,改用本地编译。"
+    warn "预编译 PixelCat Caddy 下载失败,改用本地编译。"
     rm -rf "$tmp_dir"
     return 1
   fi
 
   if ! curl -fsSL "$checksum_url" -o "$checksum_file"; then
-    warn "预编译 Caddy 校验和文件下载失败,拒绝使用未经校验的二进制,改用本地编译。"
+    warn "预编译 PixelCat Caddy 校验和文件下载失败,拒绝使用未经校验的二进制,改用本地编译。"
     rm -rf "$tmp_dir"
     return 1
   fi
 
   if ! (cd "$tmp_dir" && sha256sum -c "$(basename "$checksum_file")" >/dev/null 2>&1); then
-    warn "预编译 Caddy 校验和不匹配,改用本地编译。"
+    warn "预编译 PixelCat Caddy 校验和不匹配,改用本地编译。"
     rm -rf "$tmp_dir"
     return 1
   fi
 
   if ! tar -C "$tmp_dir" -xzf "$archive"; then
-    warn "预编译 Caddy 解压失败,改用本地编译。"
+    warn "预编译 PixelCat Caddy 解压失败,改用本地编译。"
     rm -rf "$tmp_dir"
     return 1
   fi
 
   if [ ! -x "$tmp_bin" ]; then
-    warn "预编译 Caddy 包格式不正确,改用本地编译。"
+    warn "预编译 PixelCat Caddy 包格式不正确,改用本地编译。"
     rm -rf "$tmp_dir"
     return 1
   fi
 
   run_as_root install -m 0755 "$tmp_bin" "$CADDY_BIN"
   rm -rf "$tmp_dir"
-  success "已安装预编译 Caddy:$CADDY_BIN"
+  success "已安装预编译 PixelCat Caddy:$CADDY_BIN"
   return 0
 }
 
@@ -787,12 +829,71 @@ build_caddy() {
   rm -f "$tmp_bin"
 
   echo
-  info "正在编译带 forwardproxy 插件的 Caddy..."
+  info "正在编译 PixelCat Caddy..."
   env XCADDY_WHICH_GO="$GO_BIN" "$XCADDY_BIN" build \
-    --output "$tmp_bin" \
-    --with github.com/caddyserver/forwardproxy
+    --output "$tmp_bin"
   run_as_root install -m 0755 "$tmp_bin" "$CADDY_BIN"
   rm -f "$tmp_bin"
+}
+
+download_naiveproxy() {
+  local arch api_json asset_url asset tmp_dir archive extracted_bin
+
+  arch="$(naive_linux_arch)" || return 1
+  api_json="$(mktemp)"
+  tmp_dir="$(mktemp -d)"
+
+  echo
+  info "正在查询官方 NaiveProxy 最新版本..."
+  if ! curl -fsSL "$NAIVE_RELEASE_BASE_URL" -o "$api_json"; then
+    rm -f "$api_json"
+    rm -rf "$tmp_dir"
+    error "查询 NaiveProxy release 失败。"
+    return 1
+  fi
+
+  asset_url="$(awk -v arch="$arch" '
+    /browser_download_url/ {
+      gsub(/[",]/, "", $2)
+      if ($2 ~ "naiveproxy-.*-linux-" arch "\\.tar\\.xz$") {
+        print $2
+        exit
+      }
+    }
+  ' "$api_json")"
+  rm -f "$api_json"
+
+  if [ -z "$asset_url" ]; then
+    rm -rf "$tmp_dir"
+    error "未找到 linux-${arch} 的官方 NaiveProxy 预编译包。"
+    return 1
+  fi
+
+  asset="${asset_url##*/}"
+  archive="$tmp_dir/$asset"
+  info "正在下载官方 NaiveProxy:$asset"
+  if ! curl -fL "$asset_url" -o "$archive"; then
+    rm -rf "$tmp_dir"
+    error "下载官方 NaiveProxy 失败。"
+    return 1
+  fi
+
+  if ! tar -C "$tmp_dir" -xJf "$archive"; then
+    rm -rf "$tmp_dir"
+    error "解压官方 NaiveProxy 失败。"
+    return 1
+  fi
+
+  extracted_bin="$(find "$tmp_dir" -type f -name naive -perm -111 | head -n1)"
+  if [ -z "$extracted_bin" ]; then
+    rm -rf "$tmp_dir"
+    error "官方 NaiveProxy 包内没有找到 naive 可执行文件。"
+    return 1
+  fi
+
+  run_as_root install -m 0755 "$extracted_bin" "$NAIVE_BIN"
+  rm -rf "$tmp_dir"
+  success "已安装官方 NaiveProxy:$NAIVE_BIN"
 }
 
 ensure_service_user() {
@@ -823,32 +924,59 @@ ensure_service_user() {
   fi
 }
 
-migrate_legacy_install() {
-  if systemctl list-unit-files "${LEGACY_SERVICE_NAME}.service" >/dev/null 2>&1 || [ -f "$LEGACY_SERVICE_FILE" ]; then
-    echo
-    info "检测到旧服务 ${LEGACY_SERVICE_NAME},正在迁移到 ${SERVICE_NAME}..."
-    run_as_root systemctl disable --now "$LEGACY_SERVICE_NAME" >/dev/null 2>&1 || true
-    run_as_root rm -f "$LEGACY_SERVICE_FILE"
-    run_as_root systemctl daemon-reload
+caddy_service_exists() {
+  systemctl list-unit-files "${SERVICE_NAME}.service" >/dev/null 2>&1 || [ -f "$SERVICE_FILE" ]
+}
+
+ensure_caddy_runtime() {
+  install_base_packages
+  ensure_service_user
+
+  if [ -x "$CADDY_BIN" ] && caddy_service_exists; then
+    info "检测到 PixelCat Caddy 已存在,将复用现有服务和证书目录。"
+  else
+    if ! download_prebuilt_caddy; then
+      select_or_install_go
+      install_xcaddy
+      build_caddy
+    fi
   fi
 
-  if [ ! -e "$INSTALL_DIR" ] && [ -e "$LEGACY_INSTALL_DIR" ]; then
-    run_as_root mv "$LEGACY_INSTALL_DIR" "$INSTALL_DIR"
-  fi
+  write_service
+}
 
-  if [ ! -e "$DATA_DIR" ] && [ -e "$LEGACY_DATA_DIR" ]; then
-    run_as_root mv "$LEGACY_DATA_DIR" "$DATA_DIR"
+start_caddy_service() {
+  echo
+  info "正在启动 PixelCat Caddy systemd 服务..."
+  run_as_root systemctl daemon-reload
+  run_as_root systemctl enable "$SERVICE_NAME" >/dev/null
+  if systemctl is-active --quiet "$SERVICE_NAME"; then
+    run_as_root systemctl restart "$SERVICE_NAME"
+  else
+    run_as_root systemctl start "$SERVICE_NAME"
   fi
+}
 
-  if [ -e "$LEGACY_CADDY_BIN" ]; then
-    run_as_root rm -f "$LEGACY_CADDY_BIN"
+ensure_caddy_for_certificates() {
+  local caddy_domain="$1" masquerade_url="$2" caddy_decoy
+  DOMAIN="$caddy_domain"
+  HTTP_PORT="${HTTP_PORT:-80}"
+  HTTPS_PORT="${HTTPS_PORT:-443}"
+  caddy_decoy="$(strip_scheme "$masquerade_url")"
+  caddy_decoy="${caddy_decoy:-www.bing.com}"
+  DECOY_DOMAIN="${DECOY_DOMAIN:-$caddy_decoy}"
+
+  ensure_caddy_runtime
+  if ! run_as_root test -f "$INSTALL_DIR/Caddyfile"; then
+    write_caddyfile false
+  fi
+  if [ "$SKIP_START" != "true" ]; then
+    start_caddy_service
   fi
 }
 
 write_caddyfile() {
-  local caddy_user caddy_pass tmp
-  caddy_user="$(caddy_escape "$USERNAME")"
-  caddy_pass="$(caddy_escape "$PASSWORD")"
+  local enable_naive="${1:-true}" tmp
 
   run_as_root mkdir -p "$INSTALL_DIR" "$DATA_DIR"
   run_as_root chown root:"$SERVICE_GROUP" "$INSTALL_DIR"
@@ -860,7 +988,6 @@ write_caddyfile() {
   {
     echo "{"
     echo "	admin off"
-    echo "	order forward_proxy before reverse_proxy"
     echo "	http_port $HTTP_PORT"
     echo "	https_port $HTTPS_PORT"
     echo "	servers {"
@@ -877,13 +1004,17 @@ write_caddyfile() {
     echo "	}"
     echo
     echo "	route {"
-    echo "		forward_proxy {"
-    echo "			basic_auth \"$caddy_user\" \"$caddy_pass\""
-    echo "			hide_ip"
-    echo "			hide_via"
-    echo "			probe_resistance"
-    echo "		}"
-    echo
+    if [ "$enable_naive" = "true" ] && [ -n "$USERNAME" ] && [ -n "$PASSWORD" ]; then
+      echo "		@naive {"
+      echo "			method CONNECT"
+      echo "			header Proxy-Authorization *"
+      echo "		}"
+      echo "		reverse_proxy @naive http://$NAIVE_LISTEN_HOST:$NAIVE_LISTEN_PORT {"
+      echo "			header_up Host {http.request.host}"
+      echo "			header_up Proxy-Authorization {http.request.header.Proxy-Authorization}"
+      echo "		}"
+      echo
+    fi
     echo "		reverse_proxy https://$DECOY_DOMAIN {"
     echo "			header_up Host $DECOY_DOMAIN"
     echo "			header_up X-Forwarded-Host $DOMAIN"
@@ -902,7 +1033,7 @@ write_caddyfile() {
 write_service() {
   cat <<EOF | run_as_root tee "$SERVICE_FILE" >/dev/null
 [Unit]
-Description=PixelCat ForwardProxy
+Description=PixelCat Caddy
 After=network-online.target
 Wants=network-online.target
 
@@ -936,6 +1067,65 @@ ReadWritePaths=$DATA_DIR
 [Install]
 WantedBy=multi-user.target
 EOF
+}
+
+write_naiveproxy_service() {
+  run_as_root mkdir -p "$NAIVE_INSTALL_DIR" "$NAIVE_DATA_DIR"
+  run_as_root chown root:"$SERVICE_GROUP" "$NAIVE_INSTALL_DIR"
+  run_as_root chmod 0750 "$NAIVE_INSTALL_DIR"
+  run_as_root chown -R "$SERVICE_USER":"$SERVICE_GROUP" "$NAIVE_DATA_DIR"
+  run_as_root chmod 0700 "$NAIVE_DATA_DIR"
+
+  cat <<EOF | run_as_root tee "$NAIVE_INSTALL_DIR/config.json" >/dev/null
+{
+  "listen": "http://$USERNAME:$PASSWORD@$NAIVE_LISTEN_HOST:$NAIVE_LISTEN_PORT",
+  "log": "$NAIVE_DATA_DIR/naive.log"
+}
+EOF
+  run_as_root chown root:"$SERVICE_GROUP" "$NAIVE_INSTALL_DIR/config.json"
+  run_as_root chmod 0640 "$NAIVE_INSTALL_DIR/config.json"
+
+  cat <<EOF | run_as_root tee "$NAIVE_SERVICE_FILE" >/dev/null
+[Unit]
+Description=PixelCat NaiveProxy
+Requires=$SERVICE_NAME.service
+After=$SERVICE_NAME.service
+
+[Service]
+Type=simple
+User=$SERVICE_USER
+Group=$SERVICE_GROUP
+WorkingDirectory=$NAIVE_DATA_DIR
+ExecStart=$NAIVE_BIN $NAIVE_INSTALL_DIR/config.json
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=30
+TimeoutStopSec=20
+LimitNOFILE=1048576
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+ReadWritePaths=$NAIVE_DATA_DIR
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+start_naiveproxy_service() {
+  run_as_root systemctl daemon-reload
+  run_as_root systemctl enable "$NAIVE_SERVICE_NAME" >/dev/null
+  if systemctl is-active --quiet "$NAIVE_SERVICE_NAME"; then
+    run_as_root systemctl restart "$NAIVE_SERVICE_NAME"
+  else
+    run_as_root systemctl start "$NAIVE_SERVICE_NAME"
+  fi
 }
 
 print_sing_box_config() {
@@ -993,35 +1183,23 @@ EOF
 install_stack() {
   need_linux
   need_systemd
-  migrate_legacy_install
-  install_base_packages
-  ensure_service_user
-  if ! download_prebuilt_caddy; then
-    select_or_install_go
-    install_xcaddy
-    build_caddy
-  fi
-  write_caddyfile
-  write_service
+  ensure_caddy_runtime
+  download_naiveproxy
+  write_caddyfile true
+  write_naiveproxy_service
 
   if [ "$SKIP_START" = "true" ]; then
     success "已生成配置,按要求未启动服务。"
     exit 0
   fi
 
-  echo
-  info "正在启动 PixelCat ForwardProxy systemd 服务..."
-  run_as_root systemctl daemon-reload
-  run_as_root systemctl enable "$SERVICE_NAME" >/dev/null
-  if systemctl is-active --quiet "$SERVICE_NAME"; then
-    run_as_root systemctl restart "$SERVICE_NAME"
-  else
-    run_as_root systemctl start "$SERVICE_NAME"
-  fi
+  start_caddy_service
+  start_naiveproxy_service
 
   echo
   success "部署完成。"
-  info "服务状态: systemctl status $SERVICE_NAME --no-pager"
+  info "Caddy 服务状态: systemctl status $SERVICE_NAME --no-pager"
+  info "NaiveProxy 服务状态: systemctl status $NAIVE_SERVICE_NAME --no-pager"
   info "代理地址: https://$USERNAME:******@$DOMAIN"
   print_sing_box_config
   info "查看日志: journalctl -u $SERVICE_NAME -f"
@@ -1033,9 +1211,9 @@ uninstall_stack() {
 
   if [ "$ASSUME_YES" != "true" ]; then
     if [ "$PURGE" = "true" ]; then
-      read -r -p "$(color_prompt "确认卸载 PixelCat ForwardProxy,并删除配置、证书数据、本地 Go 工具和系统用户?[y/N]: ")" uninstall_confirm
+      read -r -p "$(color_prompt "确认卸载 PixelCat NaiveProxy,并删除配置、证书数据、本地 Go 工具和系统用户?[y/N]: ")" uninstall_confirm
     else
-      read -r -p "$(color_prompt "确认卸载 PixelCat ForwardProxy 服务?配置和证书数据会保留。[y/N]: ")" uninstall_confirm
+      read -r -p "$(color_prompt "确认卸载 PixelCat NaiveProxy 服务?配置和证书数据会保留。[y/N]: ")" uninstall_confirm
     fi
     case "$uninstall_confirm" in
       y|Y|yes|YES)
@@ -1048,30 +1226,26 @@ uninstall_stack() {
   fi
 
   echo
-  info "正在停止并删除 systemd 服务..."
-  run_as_root systemctl disable --now "$SERVICE_NAME" >/dev/null 2>&1 || true
-  run_as_root systemctl disable --now "$LEGACY_SERVICE_NAME" >/dev/null 2>&1 || true
-  run_as_root rm -f "$SERVICE_FILE" "$LEGACY_SERVICE_FILE"
+  info "正在停止并删除 NaiveProxy systemd 服务..."
+  run_as_root systemctl disable --now "$NAIVE_SERVICE_NAME" >/dev/null 2>&1 || true
+  run_as_root rm -f "$NAIVE_SERVICE_FILE"
   run_as_root systemctl daemon-reload
-  run_as_root rm -f "$CADDY_BIN" "$LEGACY_CADDY_BIN"
 
   if [ "$PURGE" = "true" ]; then
-    run_as_root rm -rf "$INSTALL_DIR" "$DATA_DIR" "$LEGACY_INSTALL_DIR" "$LEGACY_DATA_DIR" "$GO_ROOT"
-    run_as_root rm -f "$XCADDY_BIN"
     if [ -f ".env" ]; then
       rm -f .env
     fi
-    if getent passwd "$SERVICE_USER" >/dev/null 2>&1; then
+    if [ ! -f "$SERVICE_FILE" ] && [ ! -f "$HY2_SERVICE_FILE" ] && getent passwd "$SERVICE_USER" >/dev/null 2>&1; then
       if command -v userdel >/dev/null 2>&1; then
         run_as_root userdel "$SERVICE_USER" >/dev/null 2>&1 || true
       elif command -v deluser >/dev/null 2>&1; then
         run_as_root deluser "$SERVICE_USER" >/dev/null 2>&1 || true
       fi
     fi
-    success "已删除配置、证书数据、.env、本地 Go 工具和系统用户。"
+    success "已删除 NaiveProxy .env。Caddy 服务和证书目录会保留,避免影响 Hysteria2。"
   fi
 
-  success "卸载完成。"
+  success "NaiveProxy 卸载完成。"
 }
 
 enable_bbr() {
@@ -1869,7 +2043,7 @@ do_install_hysteria2() {
   if [ -z "$HY2_PASSWORD" ]; then
     if [ -n "$PASSWORD" ]; then
       HY2_PASSWORD="$PASSWORD"
-      info "Hysteria2 密码默认沿用 ForwardProxy 密码。"
+      info "Hysteria2 密码默认沿用 NaiveProxy 密码。"
     else
       local generated keep
       generated="$(generate_password)"
@@ -1941,6 +2115,7 @@ do_install_hysteria2() {
   echo
   success ".env.hysteria2 已写入。"
 
+  ensure_caddy_for_certificates "$HY2_DOMAIN" "$HY2_MASQUERADE_URL"
   install_hysteria2
 }
 
@@ -1961,16 +2136,16 @@ show_menu() {
 MENU
     printf '%b\n\n' "$C_RESET"
     big_title
-    printf '%b一键脚本(ForwardProxy + Hysteria2)%b\n\n' "${C_BOLD}${C_MAGENTA}" "$C_RESET"
+    printf '%b一键脚本(NaiveProxy + Hysteria2)%b\n\n' "${C_BOLD}${C_MAGENTA}" "$C_RESET"
     printf '%b像素猫 - 科学上网ICU%b\n' "${C_BOLD}${C_GREEN}" "$C_RESET"
     printf '%b中文教程博客,整理科学上网、网络诊断、节点维护与隐私安全的实用经验。%b\n\n' "$C_DIM" "$C_RESET"
     printf '%b官网:%b %s\n' "$C_YELLOW" "$C_RESET" "https://pixelcat.icu"
     printf '%bYouTube:%b %s\n' "$C_YELLOW" "$C_RESET" "https://www.youtube.com/@PixelCatICU"
     printf '%bGitHub:%b %s\n' "$C_YELLOW" "$C_RESET" "https://github.com/PixelCatICU"
     printf '%bX:%b %s\n\n' "$C_YELLOW" "$C_RESET" "https://x.com/PixelCatICU"
-    printf '%b1)%b 安装 / 更新 PixelCat ForwardProxy\n' "$C_GREEN" "$C_RESET"
+    printf '%b1)%b 安装 / 更新 PixelCat NaiveProxy\n' "$C_GREEN" "$C_RESET"
     printf '%b2)%b 安装 / 更新 PixelCat Hysteria2\n' "$C_GREEN" "$C_RESET"
-    printf '%b3)%b 卸载 PixelCat ForwardProxy\n' "$C_RED" "$C_RESET"
+    printf '%b3)%b 卸载 PixelCat NaiveProxy\n' "$C_RED" "$C_RESET"
     printf '%b4)%b 卸载 PixelCat Hysteria2\n' "$C_RED" "$C_RESET"
     printf '%b5)%b 一键开启 BBR\n' "$C_BLUE" "$C_RESET"
     printf '%b6)%b IP 质量检测           %b(xykt/IPQuality)%b\n' "$C_BLUE" "$C_RESET" "$C_DIM" "$C_RESET"
@@ -2075,6 +2250,10 @@ fi
 if [ "$ACTION" = "install-hysteria2" ]; then
   do_install_hysteria2
   exit 0
+fi
+
+if [ "$ACTION" = "install" ]; then
+  load_naive_env_defaults
 fi
 
 DOMAIN="$(prompt_host DOMAIN "请输入代理域名,例如 proxy.example.com" "$DOMAIN")"

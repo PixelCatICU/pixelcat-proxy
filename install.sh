@@ -4,8 +4,7 @@ set -Eeuo pipefail
 REPO_OWNER="${REPO_OWNER:-PixelCatICU}"
 REPO_NAME="${REPO_NAME:-pixelcat-proxy}"
 BASE_DIR="${BASE_DIR:-/opt/pixelcat}"
-APP_DIR="${APP_DIR:-pixelcat-forwardproxy}"
-LEGACY_APP_DIR="${LEGACY_APP_DIR:-pixelcat-naiveproxy}"
+APP_DIR="${APP_DIR:-pixelcat-naiveproxy}"
 REF="${REF:-main}"
 
 if [ -z "${NO_COLOR:-}" ] && { [ -t 1 ] || [ -t 2 ]; }; then
@@ -94,11 +93,6 @@ if [ ! -w "$BASE_DIR" ]; then
 fi
 
 cd "$BASE_DIR"
-
-if [ ! -e "$APP_DIR" ] && [ -e "$LEGACY_APP_DIR" ]; then
-  info "检测到旧项目目录 $LEGACY_APP_DIR,正在改名为 $APP_DIR..."
-  mv "$LEGACY_APP_DIR" "$APP_DIR"
-fi
 
 # 同时支持分支和 tag
 if printf '%s' "$REF" | grep -Eq '^v[0-9]'; then
