@@ -235,7 +235,10 @@ systemctl restart pixelcat-naiveproxy
 安装 Hysteria2 时，脚本会先确保 `pixelcat-naiveproxy.service` 存在：
 
 - 如果 `/var/lib/pixelcat-naiveproxy` 下已经有同域名证书，Hysteria2 会直接复用。
-- 如果没有可复用证书，Hysteria2 会使用自己的 ACME 配置申请证书。
+- 证书查找会遍历 Caddy 的证书存储，不再只依赖 Let's Encrypt 单一路径。
+- 如果没有可复用证书，脚本会先尝试让 PixelCat Caddy 为该域名签出证书。
+- 如果 Caddy 原本没有运行且签证书超时，脚本会停止临时 Caddy 服务，再让 Hysteria2 自己申请 ACME 证书，避免两边抢占 `443/tcp`。
+- 如果 Caddy 原本已经在运行但仍没有该域名证书，脚本会停止安装并提示手动处理，避免打断现有 NaiveProxy 服务。
 - Hysteria2 自申请 ACME 时需要 `443/tcp` 可用于 TLS-ALPN-01 校验。
 - 先安装 Hysteria2、后安装 NaiveProxy 也可以；同域名场景下后续会优先复用 `/var/lib/pixelcat-naiveproxy` 里的 Caddy 证书。
 
@@ -356,6 +359,7 @@ Hysteria2 示例：
 
 - BBR 会写入 `/etc/sysctl.d/99-pixelcat-bbr.conf`。
 - 诊断脚本会尽量自动安装 `jq`、`dig`、`mtr`、`iperf3`、`bc`、`imagemagick`、`nexttrace` 等依赖。
+- 执行第三方远程脚本前会显示来源 URL 和本次下载 SHA256；交互模式需要确认，`-y` 或非交互模式会自动继续。
 - 部分检测项需要 root 权限和完整网络连通性。
 - 第三方脚本可能在生成报告后仍返回非 0 状态码，脚本会保留提示。
 
@@ -401,6 +405,17 @@ pixelcat-naiveproxy-caddy-linux-arm64.tar.gz
 - 校验和不匹配：拒绝使用，回退本地编译。
 - 二进制不包含 `http.handlers.forward_proxy`：拒绝使用，回退本地编译。
 - 缺少 `sha256sum`：回退本地编译。
+
+构建版本默认固定为：
+
+```text
+Go: 1.25.x
+Caddy: v2.11.2
+xcaddy: v0.4.5
+forwardproxy: naive
+```
+
+本地编译时也会使用 `CADDY_VERSION`、`XCADDY_VERSION`、`CADDY_FORWARDPROXY_REF` 这三个变量，必要时可在运行脚本前覆盖。
 
 发布方式：
 

@@ -26,6 +26,9 @@ GO_BIN=""
 XCADDY_BIN="/usr/local/bin/xcaddy"
 RELEASE_BASE_URL="${RELEASE_BASE_URL:-https://github.com/PixelCatICU/pixelcat-proxy/releases/latest/download}"
 BUILD_FROM_SOURCE="false"
+CADDY_VERSION="${CADDY_VERSION:-v2.11.2}"
+XCADDY_VERSION="${XCADDY_VERSION:-v0.4.5}"
+CADDY_FORWARDPROXY_REF="${CADDY_FORWARDPROXY_REF:-naive}"
 
 HY2_DOMAIN="${HY2_DOMAIN:-}"
 HY2_PASSWORD="${HY2_PASSWORD:-}"
@@ -805,8 +808,8 @@ install_xcaddy() {
   fi
 
   echo
-  info "正在安装 xcaddy..."
-  run_as_root env GOBIN=/usr/local/bin "$GO_BIN" install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+  info "正在安装 xcaddy:$XCADDY_VERSION"
+  run_as_root env GOBIN=/usr/local/bin "$GO_BIN" install "github.com/caddyserver/xcaddy/cmd/xcaddy@$XCADDY_VERSION"
 
   if [ ! -x "$XCADDY_BIN" ]; then
     error "xcaddy 安装失败:$XCADDY_BIN 不存在。"
@@ -820,10 +823,11 @@ build_caddy() {
   rm -f "$tmp_bin"
 
   echo
-  info "正在编译 PixelCat Caddy..."
+  info "正在编译 PixelCat Caddy:$CADDY_VERSION"
   env XCADDY_WHICH_GO="$GO_BIN" "$XCADDY_BIN" build \
+    "$CADDY_VERSION" \
     --output "$tmp_bin" \
-    --with github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@naive
+    --with "github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@$CADDY_FORWARDPROXY_REF"
   run_as_root install -m 0755 "$tmp_bin" "$CADDY_BIN"
   rm -f "$tmp_bin"
 }
@@ -889,8 +893,29 @@ start_caddy_service() {
   fi
 }
 
+stop_caddy_service() {
+  run_as_root systemctl stop "$SERVICE_NAME" >/dev/null 2>&1 || true
+}
+
+caddyfile_mentions_domain() {
+  run_as_root test -f "$INSTALL_DIR/Caddyfile" || return 1
+  run_as_root grep -Fq "$DOMAIN" "$INSTALL_DIR/Caddyfile"
+}
+
+wait_for_hy2_caddy_certificate() {
+  local attempts="${1:-12}" delay="${2:-5}" i
+  for ((i = 1; i <= attempts; i++)); do
+    resolve_hy2_cert_paths
+    if [ "$HY2_USE_ACME" = "false" ]; then
+      return 0
+    fi
+    sleep "$delay"
+  done
+  return 1
+}
+
 ensure_caddy_for_certificates() {
-  local caddy_domain="$1" masquerade_url="$2" caddy_decoy
+  local caddy_domain="$1" masquerade_url="$2" caddy_decoy was_active="false" wrote_helper="false"
   DOMAIN="$caddy_domain"
   HTTP_PORT="${HTTP_PORT:-80}"
   HTTPS_PORT="${HTTPS_PORT:-443}"
@@ -899,11 +924,41 @@ ensure_caddy_for_certificates() {
   DECOY_DOMAIN="${DECOY_DOMAIN:-$caddy_decoy}"
 
   ensure_caddy_runtime
-  if ! run_as_root test -f "$INSTALL_DIR/Caddyfile"; then
-    write_caddyfile true
+
+  resolve_hy2_cert_paths
+  if [ "$HY2_USE_ACME" = "false" ]; then
+    info "检测到可复用的 Caddy 证书:$HY2_CERT_FILE"
+    return 0
   fi
+
+  if systemctl is-active --quiet "$SERVICE_NAME"; then
+    was_active="true"
+  fi
+
+  if ! run_as_root test -f "$INSTALL_DIR/Caddyfile"; then
+    write_caddyfile false
+    wrote_helper="true"
+  elif ! caddyfile_mentions_domain; then
+    warn "现有 Caddyfile 未包含 $HY2_DOMAIN,脚本不会自动覆盖已有 NaiveProxy 配置。"
+  fi
+
   if [ "$SKIP_START" != "true" ]; then
     start_caddy_service
+    if wait_for_hy2_caddy_certificate 12 5; then
+      info "已从 Caddy 证书目录找到 $HY2_DOMAIN 证书。"
+      return 0
+    fi
+
+    if [ "$was_active" = "false" ]; then
+      stop_caddy_service
+      warn "Caddy 未能在等待时间内签出 $HY2_DOMAIN 证书,已停止临时 Caddy 服务,Hysteria2 将尝试自行申请 ACME 证书。"
+    else
+      error "没有找到 $HY2_DOMAIN 的 Caddy 证书,且 Caddy 服务原本已在运行。"
+      error "为避免打断现有服务,脚本不会停止 Caddy 释放 443/tcp。请先确认 Caddy 已签出该域名证书,或手动停用占用 443/tcp 的服务后重试。"
+      exit 1
+    fi
+  elif [ "$wrote_helper" = "true" ]; then
+    warn "已生成仅用于证书/伪装站点的 Caddyfile,但 --skip-start 不会启动 Caddy 签证书。"
   fi
 }
 
@@ -1217,7 +1272,11 @@ ensure_diagnostic_deps() {
     local nt_script
     if nt_script="$(mktemp -t pixelcat-nt.XXXXXX)"; then
       if curl -fsSL https://nxtrace.org/nt -o "$nt_script" && [ -s "$nt_script" ]; then
-        bash "$nt_script" || warn "nexttrace 安装脚本返回失败,回程路由检测可能不可用。"
+        if confirm_remote_script_execution "nexttrace 安装脚本" "https://nxtrace.org/nt" "$nt_script"; then
+          bash "$nt_script" || warn "nexttrace 安装脚本返回失败,回程路由检测可能不可用。"
+        else
+          warn "已跳过 nexttrace 安装,回程路由检测可能不可用。"
+        fi
       else
         warn "下载 nexttrace 安装脚本失败,回程路由检测可能不可用。"
       fi
@@ -1228,6 +1287,31 @@ ensure_diagnostic_deps() {
   fi
 
   DIAGNOSTIC_DEPS_PREPPED="true"
+}
+
+confirm_remote_script_execution() {
+  local title="$1" fetch_url="$2" script_path="$3" digest=""
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    digest="$(sha256sum "$script_path" | awk '{print $1}')"
+  fi
+
+  warn "即将执行第三方远程脚本:$title"
+  warn "下载地址:$fetch_url"
+  if [ -n "$digest" ]; then
+    warn "本次下载 SHA256:$digest"
+  fi
+
+  if [ "$ASSUME_YES" = "true" ] || [ ! -t 0 ]; then
+    return 0
+  fi
+
+  local ans
+  read -r -p "$(color_prompt "确认执行该远程脚本?[y/N]: ")" ans
+  case "$ans" in
+    y|Y|yes|YES) ;;
+    *) warn "已取消执行远程脚本。"; return 1 ;;
+  esac
 }
 
 run_remote_diagnostic() {
@@ -1266,6 +1350,12 @@ run_remote_diagnostic() {
   if [ ! -s "$tmp_script" ]; then
     echo "----------------------------------------"
     error "远程脚本下载结果为空: ${fetch_url}"
+    rm -f "$tmp_script"
+    trap - EXIT
+    return 1
+  fi
+
+  if ! confirm_remote_script_execution "$title" "$fetch_url" "$tmp_script"; then
     rm -f "$tmp_script"
     trap - EXIT
     return 1
@@ -1525,12 +1615,13 @@ HY2_CERT_FILE=""
 HY2_KEY_FILE=""
 
 resolve_hy2_cert_paths() {
-  local base cert key
-  base="$DATA_DIR/caddy/certificates/acme-v02.api.letsencrypt.org-directory/$HY2_DOMAIN"
-  cert="$base/${HY2_DOMAIN}.crt"
-  key="$base/${HY2_DOMAIN}.key"
+  local cert key
+  cert="$(run_as_root find "$DATA_DIR/caddy/certificates" \
+    -path "*/$HY2_DOMAIN/${HY2_DOMAIN}.crt" \
+    -type f -print -quit 2>/dev/null || true)"
+  key="${cert%.crt}.key"
 
-  if run_as_root test -f "$cert" && run_as_root test -f "$key"; then
+  if [ -n "$cert" ] && run_as_root test -f "$key"; then
     HY2_CERT_FILE="$cert"
     HY2_KEY_FILE="$key"
     HY2_USE_ACME="false"

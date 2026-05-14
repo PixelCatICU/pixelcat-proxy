@@ -18,6 +18,10 @@ jobs:
   build:
     name: Build linux-${{ matrix.arch }}
     runs-on: ubuntu-latest
+    env:
+      CADDY_VERSION: v2.11.2
+      XCADDY_VERSION: v0.4.5
+      CADDY_FORWARDPROXY_REF: naive
     strategy:
       fail-fast: false
       matrix:
@@ -32,10 +36,10 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: stable
+          go-version: "1.25.x"
 
       - name: Install xcaddy
-        run: go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+        run: go install "github.com/caddyserver/xcaddy/cmd/xcaddy@${XCADDY_VERSION}"
 
       - name: Build Caddy
         env:
@@ -43,8 +47,9 @@ jobs:
           GOARCH: ${{ matrix.arch }}
         run: |
           "$(go env GOPATH)/bin/xcaddy" build \
+            "${CADDY_VERSION}" \
             --output pixelcat-naiveproxy-caddy \
-            --with github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@naive
+            --with "github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@${CADDY_FORWARDPROXY_REF}"
 
       - name: Package
         run: |
