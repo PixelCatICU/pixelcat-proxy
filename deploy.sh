@@ -397,7 +397,7 @@ load_env_value() {
 
 load_naive_env_defaults() {
   local key value
-  [ -f ".env" ] || return
+  [ -f ".env" ] || return 0
 
   for key in DOMAIN USERNAME PASSWORD DECOY_DOMAIN EMAIL HTTP_PORT HTTPS_PORT; do
     value="$(load_env_value ".env" "$key")"
