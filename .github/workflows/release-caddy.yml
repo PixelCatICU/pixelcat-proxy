@@ -43,7 +43,8 @@ jobs:
           GOARCH: ${{ matrix.arch }}
         run: |
           "$(go env GOPATH)/bin/xcaddy" build \
-            --output pixelcat-caddy
+            --output pixelcat-caddy \
+            --with github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@naive
 
       - name: Package
         run: |

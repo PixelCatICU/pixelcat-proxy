@@ -6,7 +6,7 @@
 
 PixelCat Proxy 是一份面向 Linux 服务器的中文一键部署脚本,用于部署和维护:
 
-- PixelCat NaiveProxy: 下载并运行 `klzgrad/naiveproxy` 官方预编译 `naive` 二进制,由 HAProxy 承接 443/TLS/HTTP2 CONNECT,Caddy 管理证书和伪装站点。
+- PixelCat NaiveProxy: 使用 NaiveProxy 官方作者维护的 `github.com/klzgrad/forwardproxy` Caddy 插件,由 Caddy 同时处理 TLS、HTTP/2 CONNECT、认证和伪装站点。
 - PixelCat Hysteria2: QUIC/UDP 代理,支持端口跳跃。
 - 常用节点维护能力: BBR、IP 质量检测、流媒体解锁检测、网络质量/回程检测。
 
@@ -23,7 +23,7 @@ PixelCat Proxy 是一份面向 Linux 服务器的中文一键部署脚本,用于
 
 | 功能 | 协议/工具 | 默认端口 | 说明 |
 | --- | --- | --- | --- |
-| NaiveProxy | HTTPS/TCP | `443/tcp` | HAProxy 前端 + 官方 `klzgrad/naiveproxy` 后端,普通浏览器访问时反代伪装网站 |
+| NaiveProxy | HTTPS/TCP | `443/tcp` | Caddy + `github.com/klzgrad/forwardproxy`,普通浏览器访问时反代伪装网站 |
 | Hysteria2 | QUIC/UDP | `443/udp` | 支持 nftables/iptables 端口跳跃 |
 | BBR | Linux sysctl | - | 写入 `/etc/sysctl.d/99-pixelcat-bbr.conf` |
 | IP 质量检测 | xykt/IPQuality | - | 检测原生 IP、风险标签、黑名单、部分解锁状态 |
@@ -33,9 +33,8 @@ PixelCat Proxy 是一份面向 Linux 服务器的中文一键部署脚本,用于
 主要特性:
 
 - 中文菜单和 CLI 参数两种使用方式。
-- NaiveProxy 使用官方 `klzgrad/naiveproxy` release 预编译包。
-- HAProxy 按官方 NaiveProxy HAProxy 部署方式处理 HTTP/2 CONNECT 和认证分流。
-- Caddy 独立负责证书签发和伪装站点后端。
+- Caddy 使用 NaiveProxy 官方作者维护的 `github.com/klzgrad/forwardproxy` 插件。
+- Caddy 独立负责证书签发、HTTP/2 CONNECT、认证和伪装站点。
 - Hysteria2 官方二进制强制校验 `hashes.txt`。
 - systemd 专用用户 `pixelcat-proxy`,默认不裸跑 root 服务进程。
 - 配置文件和密码文件权限收紧。
@@ -49,7 +48,7 @@ PixelCat Proxy 是一份面向 Linux 服务器的中文一键部署脚本,用于
 - 防火墙和云安全组按需放行:
   - NaiveProxy: `80/tcp`, `443/tcp`
   - Hysteria2: `443/udp`,以及端口跳跃范围,默认 `20000-50000/udp`
-- 脚本会自动安装基础依赖和 HAProxy;NaiveProxy 官方包下载失败会中止安装,Caddy 预编译包不可用时会自动安装 Go 和 xcaddy 本地编译。
+- 脚本会自动安装基础依赖;预编译 Caddy 不可用时会自动安装 Go 和 xcaddy 本地编译。
 
 ## 一键安装
 
@@ -140,16 +139,9 @@ cd /path/to/pixelcat-naiveproxy
 ### NaiveProxy 文件位置
 
 ```text
-/usr/local/bin/pixelcat-caddy
-/usr/local/bin/pixelcat-naiveproxy
-/etc/pixelcat-caddy/Caddyfile
-/etc/pixelcat-haproxy/haproxy.cfg
-/etc/pixelcat-haproxy/certs/pixelcat.pem
-/etc/pixelcat-naiveproxy/config.json
-/var/lib/pixelcat-caddy
+/usr/local/bin/pixelcat-naiveproxy-caddy
+/etc/pixelcat-naiveproxy/Caddyfile
 /var/lib/pixelcat-naiveproxy
-/etc/systemd/system/pixelcat-caddy.service
-/etc/systemd/system/pixelcat-haproxy.service
 /etc/systemd/system/pixelcat-naiveproxy.service
 /opt/pixelcat/pixelcat-naiveproxy/.env
 ```
@@ -157,11 +149,9 @@ cd /path/to/pixelcat-naiveproxy
 ### NaiveProxy 常用命令
 
 ```bash
-systemctl status pixelcat-caddy --no-pager
-systemctl status pixelcat-haproxy --no-pager
 systemctl status pixelcat-naiveproxy --no-pager
-journalctl -u pixelcat-haproxy -f
-systemctl restart pixelcat-haproxy
+journalctl -u pixelcat-naiveproxy -f
+systemctl restart pixelcat-naiveproxy
 ```
 
 ### NaiveProxy 卸载
@@ -178,7 +168,7 @@ systemctl restart pixelcat-haproxy
 ./deploy.sh --uninstall --purge
 ```
 
-`pixelcat-caddy`、Caddy 证书目录和 Hysteria2 相关文件会保留,避免影响其他协议复用证书。
+`pixelcat-naiveproxy`、证书目录和 Hysteria2 相关文件会保留,避免影响其他协议复用证书。
 
 免确认卸载:
 
@@ -237,9 +227,9 @@ systemctl restart pixelcat-haproxy
 
 ### Hysteria2 证书逻辑
 
-- 安装 Hysteria2 前会先检查 `pixelcat-caddy.service`。
-- 如果 Caddy 已存在且已有同域名证书,脚本会优先复用 `/var/lib/pixelcat-caddy` 下的证书。
-- 如果 Caddy 不存在,脚本会先安装并启动 PixelCat Caddy,再继续安装 Hysteria2。
+- 安装 Hysteria2 前会先检查 `pixelcat-naiveproxy.service`。
+- 如果 NaiveProxy/Caddy 已存在且已有同域名证书,脚本会优先复用 `/var/lib/pixelcat-naiveproxy` 下的证书。
+- 如果 NaiveProxy/Caddy 不存在,脚本会先安装并启动 `pixelcat-naiveproxy.service`,再继续安装 Hysteria2。
 - 如果没有可复用证书,Hysteria2 会自己使用 ACME 申请证书。
 - Hysteria2 自申请 ACME 时需要 `443/tcp` 可用于 TLS-ALPN-01 校验。
 
@@ -399,8 +389,6 @@ NaiveProxy:
 | `EMAIL` | 否 | 空 | Let's Encrypt 邮箱 |
 | `HTTP_PORT` | 否 | `80` | HTTP 端口 |
 | `HTTPS_PORT` | 否 | `443` | HTTPS 代理端口 |
-| `CADDY_INTERNAL_HTTPS_PORT` | 否 | `8443` | Caddy 内部 TLS/证书端口 |
-| `CADDY_DECOY_PORT` | 否 | `8081` | HAProxy 转发到 Caddy 的本地伪装站端口 |
 
 Hysteria2:
 
@@ -450,6 +438,6 @@ git push origin v1.0.0
 - 首次申请证书时,公网必须能访问到对应域名和端口。
 - `DECOY_DOMAIN` 只填域名,例如 `www.example.com`。
 - 复杂网站可能因为 Cookie、CSP、WebSocket 或静态资源跨域限制导致反代显示不完整。
-- `/var/lib/pixelcat-caddy` 和 `/var/lib/pixelcat-hysteria2` 保存证书和 ACME 数据,不要随意删除。
+- `/var/lib/pixelcat-naiveproxy` 和 `/var/lib/pixelcat-hysteria2` 保存证书和 ACME 数据,不要随意删除。
 - 如果域名套了 CDN,请确认 CDN 支持相关代理流量;不确定时先使用仅 DNS 解析。
 - OpenVZ 等不支持 nftables/iptables NAT 的环境,建议关闭 Hysteria2 端口跳跃。
