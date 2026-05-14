@@ -27,6 +27,13 @@ NAIVE_BIN="/usr/local/bin/pixelcat-naiveproxy"
 NAIVE_RELEASE_BASE_URL="${NAIVE_RELEASE_BASE_URL:-https://api.github.com/repos/klzgrad/naiveproxy/releases/latest}"
 NAIVE_LISTEN_HOST="${NAIVE_LISTEN_HOST:-127.0.0.1}"
 NAIVE_LISTEN_PORT="${NAIVE_LISTEN_PORT:-8080}"
+HAPROXY_SERVICE_NAME="pixelcat-haproxy"
+HAPROXY_INSTALL_DIR="/etc/pixelcat-haproxy"
+HAPROXY_CERT_DIR="${HAPROXY_INSTALL_DIR}/certs"
+HAPROXY_CERT_BUNDLE="${HAPROXY_CERT_DIR}/pixelcat.pem"
+HAPROXY_SERVICE_FILE="/etc/systemd/system/${HAPROXY_SERVICE_NAME}.service"
+CADDY_INTERNAL_HTTPS_PORT="${CADDY_INTERNAL_HTTPS_PORT:-8443}"
+CADDY_DECOY_PORT="${CADDY_DECOY_PORT:-8081}"
 SERVICE_USER="pixelcat-proxy"
 SERVICE_GROUP="pixelcat-proxy"
 GO_ROOT="/usr/local/go-pixelcat"
@@ -640,24 +647,24 @@ install_base_packages() {
   case "${ID:-} ${ID_LIKE:-}" in
     *ubuntu*|*debian*)
       run_as_root apt-get update
-      run_as_root apt-get install -y ca-certificates curl tar gzip xz-utils
+      run_as_root apt-get install -y ca-certificates curl tar gzip xz-utils haproxy
       ;;
     *centos*|*rhel*|*rocky*|*almalinux*|*fedora*)
       if command -v dnf >/dev/null 2>&1; then
-        run_as_root dnf install -y ca-certificates curl tar gzip xz
+        run_as_root dnf install -y ca-certificates curl tar gzip xz haproxy
       elif command -v yum >/dev/null 2>&1; then
-        run_as_root yum install -y ca-certificates curl tar gzip xz
+        run_as_root yum install -y ca-certificates curl tar gzip xz haproxy
       else
         error "未找到 dnf 或 yum。"
         exit 1
       fi
       ;;
     *alpine*)
-      run_as_root apk add --no-cache ca-certificates curl tar gzip xz shadow
+      run_as_root apk add --no-cache ca-certificates curl tar gzip xz shadow haproxy
       ;;
     *)
       error "暂不支持自动安装依赖的系统:${PRETTY_NAME:-unknown}"
-      error "请先手动安装 ca-certificates curl tar gzip xz 后重试。"
+      error "请先手动安装 ca-certificates curl tar gzip xz haproxy 后重试。"
       exit 1
       ;;
   esac
@@ -968,7 +975,7 @@ ensure_caddy_for_certificates() {
 
   ensure_caddy_runtime
   if ! run_as_root test -f "$INSTALL_DIR/Caddyfile"; then
-    write_caddyfile false
+    write_caddyfile true
   fi
   if [ "$SKIP_START" != "true" ]; then
     start_caddy_service
@@ -976,7 +983,7 @@ ensure_caddy_for_certificates() {
 }
 
 write_caddyfile() {
-  local enable_naive="${1:-true}" tmp
+  local enable_tls="${1:-true}" tmp
 
   run_as_root mkdir -p "$INSTALL_DIR" "$DATA_DIR"
   run_as_root chown root:"$SERVICE_GROUP" "$INSTALL_DIR"
@@ -989,7 +996,7 @@ write_caddyfile() {
     echo "{"
     echo "	admin off"
     echo "	http_port $HTTP_PORT"
-    echo "	https_port $HTTPS_PORT"
+    echo "	https_port $CADDY_INTERNAL_HTTPS_PORT"
     echo "	servers {"
     echo "		protocols h1 h2"
     echo "	}"
@@ -998,29 +1005,26 @@ write_caddyfile() {
     fi
     echo "}"
     echo
-    echo ":$HTTPS_PORT, $DOMAIN {"
-    echo "	tls {"
-    echo "		protocols tls1.2 tls1.3"
-    echo "	}"
-    echo
-    echo "	route {"
-    if [ "$enable_naive" = "true" ] && [ -n "$USERNAME" ] && [ -n "$PASSWORD" ]; then
-      echo "		@naive {"
-      echo "			method CONNECT"
-      echo "			header Proxy-Authorization *"
-      echo "		}"
-      echo "		reverse_proxy @naive http://$NAIVE_LISTEN_HOST:$NAIVE_LISTEN_PORT {"
-      echo "			header_up Host {http.request.host}"
-      echo "			header_up Proxy-Authorization {http.request.header.Proxy-Authorization}"
-      echo "		}"
+    if [ "$enable_tls" = "true" ]; then
+      echo "$DOMAIN:$CADDY_INTERNAL_HTTPS_PORT {"
+      echo "	tls {"
+      echo "		protocols tls1.2 tls1.3"
+      echo "	}"
+      echo
+      echo "	reverse_proxy https://$DECOY_DOMAIN {"
+      echo "		header_up Host $DECOY_DOMAIN"
+      echo "		header_up X-Forwarded-Host $DOMAIN"
+      echo "		header_up X-Forwarded-Proto https"
+      echo "	}"
+      echo "}"
       echo
     fi
+    echo "http://127.0.0.1:$CADDY_DECOY_PORT {"
     echo "		reverse_proxy https://$DECOY_DOMAIN {"
     echo "			header_up Host $DECOY_DOMAIN"
     echo "			header_up X-Forwarded-Host $DOMAIN"
     echo "			header_up X-Forwarded-Proto https"
     echo "		}"
-    echo "	}"
     echo "}"
   } > "$tmp"
 
@@ -1076,9 +1080,9 @@ write_naiveproxy_service() {
   run_as_root chown -R "$SERVICE_USER":"$SERVICE_GROUP" "$NAIVE_DATA_DIR"
   run_as_root chmod 0700 "$NAIVE_DATA_DIR"
 
-  cat <<EOF | run_as_root tee "$NAIVE_INSTALL_DIR/config.json" >/dev/null
+cat <<EOF | run_as_root tee "$NAIVE_INSTALL_DIR/config.json" >/dev/null
 {
-  "listen": "http://$USERNAME:$PASSWORD@$NAIVE_LISTEN_HOST:$NAIVE_LISTEN_PORT",
+  "listen": "http://$NAIVE_LISTEN_HOST:$NAIVE_LISTEN_PORT",
   "log": "$NAIVE_DATA_DIR/naive.log"
 }
 EOF
@@ -1125,6 +1129,126 @@ start_naiveproxy_service() {
     run_as_root systemctl restart "$NAIVE_SERVICE_NAME"
   else
     run_as_root systemctl start "$NAIVE_SERVICE_NAME"
+  fi
+}
+
+sync_haproxy_certificate() {
+  local attempt cert_file key_file
+
+  run_as_root mkdir -p "$HAPROXY_CERT_DIR"
+  for attempt in $(seq 1 60); do
+    cert_file="$(run_as_root sh -c "find '$DATA_DIR/caddy/certificates' -type f -name '$DOMAIN.crt' 2>/dev/null | head -n1" || true)"
+    if [ -n "$cert_file" ]; then
+      key_file="${cert_file%.crt}.key"
+      if run_as_root test -f "$key_file"; then
+        run_as_root sh -c "cat '$cert_file' '$key_file' > '$HAPROXY_CERT_BUNDLE'"
+        run_as_root chmod 0640 "$HAPROXY_CERT_BUNDLE"
+        success "已同步 Caddy 证书到 HAProxy:$HAPROXY_CERT_BUNDLE"
+        return
+      fi
+    fi
+    sleep 2
+  done
+
+  error "等待 Caddy 签发证书超时,未找到 $DOMAIN 的证书。"
+  exit 1
+}
+
+write_haproxy_config() {
+  local haproxy_bin tmp
+
+  if ! command -v haproxy >/dev/null 2>&1; then
+    error "未找到 haproxy,请确认基础依赖安装成功。"
+    exit 1
+  fi
+  haproxy_bin="$(command -v haproxy)"
+
+  run_as_root mkdir -p "$HAPROXY_INSTALL_DIR"
+  tmp="$(mktemp)"
+  {
+    echo "global"
+    echo "	log stdout format raw local0"
+    echo "	maxconn 8192"
+    echo
+    echo "defaults"
+    echo "	mode http"
+    echo "	log global"
+    echo "	option httplog"
+    echo "	timeout connect 10s"
+    echo "	timeout client 1h"
+    echo "	timeout server 1h"
+    echo
+    echo "userlist pixelcat_users"
+    echo "	user $USERNAME insecure-password $PASSWORD"
+    echo
+    echo "frontend pixelcat_https"
+    echo "	bind *:$HTTPS_PORT ssl crt $HAPROXY_CERT_BUNDLE alpn h2,http/1.1"
+    echo "	option http-use-proxy-header"
+    echo "	acl auth_ok http_auth(pixelcat_users)"
+    echo "	use_backend naive_backend if auth_ok"
+    echo "	default_backend caddy_decoy_backend"
+    echo
+    echo "backend naive_backend"
+    echo "	http-request del-header proxy-authorization"
+    echo "	server naive $NAIVE_LISTEN_HOST:$NAIVE_LISTEN_PORT"
+    echo
+    echo "backend caddy_decoy_backend"
+    echo "	server caddy 127.0.0.1:$CADDY_DECOY_PORT"
+  } > "$tmp"
+
+  run_as_root cp "$tmp" "$HAPROXY_INSTALL_DIR/haproxy.cfg"
+  run_as_root chown root:root "$HAPROXY_INSTALL_DIR/haproxy.cfg"
+  run_as_root chmod 0640 "$HAPROXY_INSTALL_DIR/haproxy.cfg"
+  rm -f "$tmp"
+
+  cat <<EOF | run_as_root tee "$HAPROXY_SERVICE_FILE" >/dev/null
+[Unit]
+Description=PixelCat HAProxy Frontend
+After=network-online.target $SERVICE_NAME.service $NAIVE_SERVICE_NAME.service
+Wants=network-online.target
+Requires=$SERVICE_NAME.service $NAIVE_SERVICE_NAME.service
+
+[Service]
+Type=notify
+ExecStart=$haproxy_bin -Ws -f $HAPROXY_INSTALL_DIR/haproxy.cfg -p /run/pixelcat-haproxy.pid
+ExecReload=$haproxy_bin -Ws -f $HAPROXY_INSTALL_DIR/haproxy.cfg -p /run/pixelcat-haproxy.pid -sf \$MAINPID
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=30
+TimeoutStopSec=20
+LimitNOFILE=1048576
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+ReadOnlyPaths=$HAPROXY_INSTALL_DIR
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  if ! run_as_root "$haproxy_bin" -c -f "$HAPROXY_INSTALL_DIR/haproxy.cfg"; then
+    error "HAProxy 配置校验失败。"
+    exit 1
+  fi
+}
+
+start_haproxy_service() {
+  echo
+  info "正在启动 PixelCat HAProxy systemd 服务..."
+  run_as_root systemctl daemon-reload
+  run_as_root systemctl enable "$HAPROXY_SERVICE_NAME" >/dev/null
+  if systemctl is-active --quiet "$HAPROXY_SERVICE_NAME"; then
+    run_as_root systemctl restart "$HAPROXY_SERVICE_NAME"
+  else
+    run_as_root systemctl start "$HAPROXY_SERVICE_NAME"
   fi
 }
 
@@ -1194,15 +1318,19 @@ install_stack() {
   fi
 
   start_caddy_service
+  sync_haproxy_certificate
+  write_haproxy_config
   start_naiveproxy_service
+  start_haproxy_service
 
   echo
   success "部署完成。"
   info "Caddy 服务状态: systemctl status $SERVICE_NAME --no-pager"
   info "NaiveProxy 服务状态: systemctl status $NAIVE_SERVICE_NAME --no-pager"
+  info "HAProxy 服务状态: systemctl status $HAPROXY_SERVICE_NAME --no-pager"
   info "代理地址: https://$USERNAME:******@$DOMAIN"
   print_sing_box_config
-  info "查看日志: journalctl -u $SERVICE_NAME -f"
+  info "查看日志: journalctl -u $HAPROXY_SERVICE_NAME -f"
 }
 
 uninstall_stack() {
@@ -1227,11 +1355,14 @@ uninstall_stack() {
 
   echo
   info "正在停止并删除 NaiveProxy systemd 服务..."
+  run_as_root systemctl disable --now "$HAPROXY_SERVICE_NAME" >/dev/null 2>&1 || true
   run_as_root systemctl disable --now "$NAIVE_SERVICE_NAME" >/dev/null 2>&1 || true
+  run_as_root rm -f "$HAPROXY_SERVICE_FILE"
   run_as_root rm -f "$NAIVE_SERVICE_FILE"
   run_as_root systemctl daemon-reload
 
   if [ "$PURGE" = "true" ]; then
+    run_as_root rm -rf "$HAPROXY_INSTALL_DIR" "$NAIVE_INSTALL_DIR" "$NAIVE_DATA_DIR"
     if [ -f ".env" ]; then
       rm -f .env
     fi

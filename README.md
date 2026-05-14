@@ -6,7 +6,7 @@
 
 PixelCat Proxy 是一份面向 Linux 服务器的中文一键部署脚本,用于部署和维护:
 
-- PixelCat NaiveProxy: 下载并运行 `klzgrad/naiveproxy` 官方预编译 `naive` 二进制,由 Caddy 提供 TLS、证书和伪装站点。
+- PixelCat NaiveProxy: 下载并运行 `klzgrad/naiveproxy` 官方预编译 `naive` 二进制,由 HAProxy 承接 443/TLS/HTTP2 CONNECT,Caddy 管理证书和伪装站点。
 - PixelCat Hysteria2: QUIC/UDP 代理,支持端口跳跃。
 - 常用节点维护能力: BBR、IP 质量检测、流媒体解锁检测、网络质量/回程检测。
 
@@ -23,7 +23,7 @@ PixelCat Proxy 是一份面向 Linux 服务器的中文一键部署脚本,用于
 
 | 功能 | 协议/工具 | 默认端口 | 说明 |
 | --- | --- | --- | --- |
-| NaiveProxy | HTTPS/TCP | `443/tcp` | 官方 `klzgrad/naiveproxy` 后端 + Caddy TLS 前端,普通浏览器访问时反代伪装网站 |
+| NaiveProxy | HTTPS/TCP | `443/tcp` | HAProxy 前端 + 官方 `klzgrad/naiveproxy` 后端,普通浏览器访问时反代伪装网站 |
 | Hysteria2 | QUIC/UDP | `443/udp` | 支持 nftables/iptables 端口跳跃 |
 | BBR | Linux sysctl | - | 写入 `/etc/sysctl.d/99-pixelcat-bbr.conf` |
 | IP 质量检测 | xykt/IPQuality | - | 检测原生 IP、风险标签、黑名单、部分解锁状态 |
@@ -34,7 +34,8 @@ PixelCat Proxy 是一份面向 Linux 服务器的中文一键部署脚本,用于
 
 - 中文菜单和 CLI 参数两种使用方式。
 - NaiveProxy 使用官方 `klzgrad/naiveproxy` release 预编译包。
-- Caddy 独立负责 TLS、证书和伪装站点。
+- HAProxy 按官方 NaiveProxy HAProxy 部署方式处理 HTTP/2 CONNECT 和认证分流。
+- Caddy 独立负责证书签发和伪装站点后端。
 - Hysteria2 官方二进制强制校验 `hashes.txt`。
 - systemd 专用用户 `pixelcat-proxy`,默认不裸跑 root 服务进程。
 - 配置文件和密码文件权限收紧。
@@ -48,7 +49,7 @@ PixelCat Proxy 是一份面向 Linux 服务器的中文一键部署脚本,用于
 - 防火墙和云安全组按需放行:
   - NaiveProxy: `80/tcp`, `443/tcp`
   - Hysteria2: `443/udp`,以及端口跳跃范围,默认 `20000-50000/udp`
-- 脚本会自动安装基础依赖;NaiveProxy 官方包下载失败会中止安装,Caddy 预编译包不可用时会自动安装 Go 和 xcaddy 本地编译。
+- 脚本会自动安装基础依赖和 HAProxy;NaiveProxy 官方包下载失败会中止安装,Caddy 预编译包不可用时会自动安装 Go 和 xcaddy 本地编译。
 
 ## 一键安装
 
@@ -142,10 +143,13 @@ cd /path/to/pixelcat-naiveproxy
 /usr/local/bin/pixelcat-caddy
 /usr/local/bin/pixelcat-naiveproxy
 /etc/pixelcat-caddy/Caddyfile
+/etc/pixelcat-haproxy/haproxy.cfg
+/etc/pixelcat-haproxy/certs/pixelcat.pem
 /etc/pixelcat-naiveproxy/config.json
 /var/lib/pixelcat-caddy
 /var/lib/pixelcat-naiveproxy
 /etc/systemd/system/pixelcat-caddy.service
+/etc/systemd/system/pixelcat-haproxy.service
 /etc/systemd/system/pixelcat-naiveproxy.service
 /opt/pixelcat/pixelcat-naiveproxy/.env
 ```
@@ -154,9 +158,10 @@ cd /path/to/pixelcat-naiveproxy
 
 ```bash
 systemctl status pixelcat-caddy --no-pager
+systemctl status pixelcat-haproxy --no-pager
 systemctl status pixelcat-naiveproxy --no-pager
-journalctl -u pixelcat-caddy -f
-systemctl restart pixelcat-caddy
+journalctl -u pixelcat-haproxy -f
+systemctl restart pixelcat-haproxy
 ```
 
 ### NaiveProxy 卸载
@@ -394,6 +399,8 @@ NaiveProxy:
 | `EMAIL` | 否 | 空 | Let's Encrypt 邮箱 |
 | `HTTP_PORT` | 否 | `80` | HTTP 端口 |
 | `HTTPS_PORT` | 否 | `443` | HTTPS 代理端口 |
+| `CADDY_INTERNAL_HTTPS_PORT` | 否 | `8443` | Caddy 内部 TLS/证书端口 |
+| `CADDY_DECOY_PORT` | 否 | `8081` | HAProxy 转发到 Caddy 的本地伪装站端口 |
 
 Hysteria2:
 
