@@ -127,7 +127,7 @@ PixelCat 一键脚本(NaiveProxy + Hysteria2)
   ./deploy.sh --unlock-check           运行流媒体解锁检测
   ./deploy.sh --net-quality            运行网络质量 / 回程检测
 通用选项:
-      --purge           配合 --uninstall* 一起删除配置、证书数据和系统用户
+      --purge           配合 --uninstall* 一起清理本地 .env;Hysteria2 会额外删除自身配置和证书数据
   -y, --yes             自动确认覆盖配置
       --skip-start      只生成配置,不启动服务
   -h, --help            显示帮助
@@ -695,13 +695,13 @@ download_prebuilt_caddy() {
   fi
 
   arch="$(linux_arch)" || return 1
-  asset="pixelcat-caddy-linux-${arch}.tar.gz"
+  asset="pixelcat-naiveproxy-caddy-linux-${arch}.tar.gz"
   asset_url="${RELEASE_BASE_URL}/${asset}"
   checksum_url="${asset_url}.sha256"
   tmp_dir="$(mktemp -d)"
   archive="$tmp_dir/$asset"
   checksum_file="$tmp_dir/$asset.sha256"
-  tmp_bin="$tmp_dir/pixelcat-caddy"
+  tmp_bin="$tmp_dir/pixelcat-naiveproxy-caddy"
 
   echo
   info "正在下载预编译 PixelCat Caddy:$asset"
@@ -860,30 +860,8 @@ caddy_service_exists() {
   systemctl list-unit-files "${SERVICE_NAME}.service" >/dev/null 2>&1 || [ -f "$SERVICE_FILE" ]
 }
 
-migrate_legacy_caddy_install() {
-  if systemctl list-unit-files pixelcat-caddy.service >/dev/null 2>&1 || [ -f /etc/systemd/system/pixelcat-caddy.service ]; then
-    info "检测到旧服务 pixelcat-caddy,正在迁移到 ${SERVICE_NAME}..."
-    run_as_root systemctl disable --now pixelcat-caddy >/dev/null 2>&1 || true
-    run_as_root rm -f /etc/systemd/system/pixelcat-caddy.service
-  fi
-
-  if [ ! -e "$DATA_DIR" ] && [ -e /var/lib/pixelcat-caddy ]; then
-    run_as_root mv /var/lib/pixelcat-caddy "$DATA_DIR"
-  elif [ -e /var/lib/pixelcat-caddy/caddy ] && [ ! -e "$DATA_DIR/caddy" ]; then
-    run_as_root mkdir -p "$DATA_DIR"
-    run_as_root mv /var/lib/pixelcat-caddy/caddy "$DATA_DIR/caddy"
-  fi
-
-  if [ -e /usr/local/bin/pixelcat-caddy ]; then
-    run_as_root rm -f /usr/local/bin/pixelcat-caddy
-  fi
-
-  run_as_root systemctl daemon-reload
-}
-
 ensure_caddy_runtime() {
   install_base_packages
-  migrate_legacy_caddy_install
   ensure_service_user
 
   if [ -x "$CADDY_BIN" ] && caddy_service_exists && caddy_bin_has_forwardproxy "$CADDY_BIN"; then
@@ -909,14 +887,6 @@ start_caddy_service() {
   else
     run_as_root systemctl start "$SERVICE_NAME"
   fi
-}
-
-cleanup_old_naive_frontends() {
-  run_as_root systemctl disable --now pixelcat-haproxy >/dev/null 2>&1 || true
-  run_as_root rm -f /etc/systemd/system/pixelcat-haproxy.service
-  run_as_root rm -f /usr/local/bin/pixelcat-naiveproxy
-  run_as_root rm -rf /etc/pixelcat-haproxy
-  run_as_root systemctl daemon-reload
 }
 
 ensure_caddy_for_certificates() {
@@ -1089,7 +1059,6 @@ install_stack() {
   need_systemd
   ensure_caddy_runtime
   write_caddyfile true
-  cleanup_old_naive_frontends
 
   if [ "$SKIP_START" = "true" ]; then
     success "已生成配置,按要求未启动服务。"
@@ -1112,9 +1081,9 @@ uninstall_stack() {
 
   if [ "$ASSUME_YES" != "true" ]; then
     if [ "$PURGE" = "true" ]; then
-      read -r -p "$(color_prompt "确认卸载 PixelCat NaiveProxy,并删除配置、证书数据、本地 Go 工具和系统用户?[y/N]: ")" uninstall_confirm
+      read -r -p "$(color_prompt "确认移除 NaiveProxy 转发配置,并删除本地 .env?[y/N]: ")" uninstall_confirm
     else
-      read -r -p "$(color_prompt "确认卸载 PixelCat NaiveProxy 服务?配置和证书数据会保留。[y/N]: ")" uninstall_confirm
+      read -r -p "$(color_prompt "确认移除 NaiveProxy 转发配置?Caddy 服务、配置和证书数据会保留。[y/N]: ")" uninstall_confirm
     fi
     case "$uninstall_confirm" in
       y|Y|yes|YES)
@@ -1128,7 +1097,6 @@ uninstall_stack() {
 
   echo
   info "正在移除 NaiveProxy 转发配置..."
-  cleanup_old_naive_frontends
   if [ -n "$DOMAIN" ] && [ -n "$DECOY_DOMAIN" ]; then
     write_caddyfile false
     if [ "$SKIP_START" != "true" ]; then
@@ -1137,7 +1105,6 @@ uninstall_stack() {
   fi
 
   if [ "$PURGE" = "true" ]; then
-    run_as_root rm -rf /etc/pixelcat-haproxy
     if [ -f ".env" ]; then
       rm -f .env
     fi
@@ -1375,6 +1342,10 @@ generate_password() {
 
 detect_default_iface() {
   ip route show default 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}'
+}
+
+is_valid_iface() {
+  printf '%s' "$1" | grep -Eq '^[A-Za-z0-9_.:@-]{1,64}$'
 }
 
 prompt_optional_mbps() {
@@ -1976,6 +1947,10 @@ do_install_hysteria2() {
         exit 1
       fi
       info "默认网卡:$HY2_HOP_IFACE"
+    fi
+    if ! is_valid_iface "$HY2_HOP_IFACE"; then
+      error "HY2_HOP_IFACE 无效:只能使用 1-64 位 A-Z a-z 0-9 _ . : @ -"
+      exit 1
     fi
   fi
 
