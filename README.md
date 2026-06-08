@@ -410,7 +410,7 @@ pixelcat-naiveproxy-caddy-linux-arm64.tar.gz
 
 ```text
 Go: 1.25.x
-Caddy: v2.11.2
+Caddy: v2.11.3
 xcaddy: v0.4.5
 forwardproxy: naive
 ```

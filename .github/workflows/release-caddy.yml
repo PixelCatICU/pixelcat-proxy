@@ -19,7 +19,7 @@ jobs:
     name: Build linux-${{ matrix.arch }}
     runs-on: ubuntu-latest
     env:
-      CADDY_VERSION: v2.11.2
+      CADDY_VERSION: v2.11.3
       XCADDY_VERSION: v0.4.5
       CADDY_FORWARDPROXY_REF: naive
     strategy:
