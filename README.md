@@ -406,11 +406,11 @@ pixelcat-naiveproxy-caddy-linux-arm64.tar.gz
 - 二进制不包含 `http.handlers.forward_proxy`：拒绝使用，回退本地编译。
 - 缺少 `sha256sum`：回退本地编译。
 
-构建版本默认固定为：
+构建版本默认使用：
 
 ```text
-Go: 1.25.x
-Caddy: v2.11.3
+Go: latest stable from go.dev
+Caddy: v2.11.4
 xcaddy: v0.4.5
 forwardproxy: naive
 ```

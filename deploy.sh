@@ -26,7 +26,7 @@ GO_BIN=""
 XCADDY_BIN="/usr/local/bin/xcaddy"
 RELEASE_BASE_URL="${RELEASE_BASE_URL:-https://github.com/PixelCatICU/pixelcat-proxy/releases/latest/download}"
 BUILD_FROM_SOURCE="false"
-CADDY_VERSION="${CADDY_VERSION:-v2.11.3}"
+CADDY_VERSION="${CADDY_VERSION:-v2.11.4}"
 XCADDY_VERSION="${XCADDY_VERSION:-v0.4.5}"
 CADDY_FORWARDPROXY_REF="${CADDY_FORWARDPROXY_REF:-naive}"
 
