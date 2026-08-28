@@ -4,7 +4,9 @@
 
 # PixelCat Proxy
 
-PixelCat Proxy 是面向 Linux 服务器的中文一键部署脚本，用来部署和维护：
+**中文** | [Русский](README.ru.md) | [فارسی](README.fa.md)
+
+PixelCat Proxy 是面向 Linux 服务器的三语一键部署脚本，支持中文、俄语和波斯语，用来部署和维护：
 
 - **NaiveProxy**：使用 NaiveProxy 作者维护的 `github.com/klzgrad/forwardproxy` Caddy 插件，由 Caddy 提供 TLS、HTTP/2 CONNECT、Basic Auth、probe resistance 和伪装站点。
 - **Hysteria2**：使用官方 Hysteria2 二进制，支持 UDP 端口跳跃。
@@ -66,7 +68,7 @@ curl -fsSL https://raw.githubusercontent.com/PixelCatICU/pixelcat-proxy/main/ins
 /opt/pixelcat/pixelcat-naiveproxy
 ```
 
-然后启动中文菜单。
+然后启动语言选择与安装菜单。
 
 如果已经把项目放到服务器，也可以直接运行：
 
@@ -74,6 +76,27 @@ curl -fsSL https://raw.githubusercontent.com/PixelCatICU/pixelcat-proxy/main/ins
 cd /path/to/pixelcat-naiveproxy
 ./deploy.sh
 ```
+
+## 语言 / Languages
+
+交互运行时可选择语言，也可以通过 `--lang` 或 `PIXELCAT_LANG` 明确指定：
+
+```bash
+./deploy.sh --lang zh       # 中文
+./deploy.sh --lang ru       # Русский
+./deploy.sh --lang fa       # فارسی
+
+PIXELCAT_LANG=ru ./deploy.sh
+```
+
+一键入口同样支持语言参数：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PixelCatICU/pixelcat-proxy/main/install.sh | bash -s -- --lang ru
+curl -fsSL https://raw.githubusercontent.com/PixelCatICU/pixelcat-proxy/main/install.sh | bash -s -- --lang fa
+```
+
+Русский: используйте `--lang ru`. فارسی: از `--lang fa` استفاده کنید. 非交互模式未指定语言时默认使用中文。
 
 ## 菜单
 

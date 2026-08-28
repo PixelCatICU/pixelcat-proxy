@@ -13,6 +13,9 @@ SKIP_START="false"
 PASSWORD_FROM_ARG="false"
 ACTION="menu"
 PURGE="false"
+UI_LANG="${PIXELCAT_LANG:-zh}"
+UI_LANG_EXPLICIT="false"
+[ -n "${PIXELCAT_LANG:-}" ] && UI_LANG_EXPLICIT="true"
 
 SERVICE_NAME="pixelcat-naiveproxy"
 INSTALL_DIR="/etc/pixelcat-naiveproxy"
@@ -77,20 +80,173 @@ color_prompt() {
   printf '%b%s%b' "${C_BOLD}${C_CYAN}" "$1" "$C_RESET"
 }
 
+normalize_ui_lang() {
+  case "$1" in
+    zh|zh-CN|cn) printf 'zh' ;;
+    ru|ru-RU) printf 'ru' ;;
+    fa|fa-IR|per|persian) printf 'fa' ;;
+    *) return 1 ;;
+  esac
+}
+
+if ! UI_LANG="$(normalize_ui_lang "$UI_LANG")"; then
+  UI_LANG="zh"
+fi
+
+msg() {
+  local key="$1"
+  case "${UI_LANG}:${key}" in
+    ru:script_title) printf 'Установщик PixelCat (NaiveProxy + Hysteria2)' ;;
+    fa:script_title) printf 'نصب‌کننده پیکسل‌کت (NaiveProxy + Hysteria2)' ;;
+    *:script_title) printf 'PixelCat 一键脚本 (NaiveProxy + Hysteria2)' ;;
+    ru:blog_intro) printf 'Практические руководства по прокси, диагностике сети, обслуживанию узлов и приватности.' ;;
+    fa:blog_intro) printf 'راهنماهای کاربردی پراکسی، عیب‌یابی شبکه، نگهداری سرور و حریم خصوصی.' ;;
+    *:blog_intro) printf '中文教程博客，整理代理、网络诊断、节点维护与隐私安全的实用经验。' ;;
+    ru:website) printf 'Сайт' ;; fa:website) printf 'وب‌سایت' ;; *:website) printf '官网' ;;
+    ru:menu_1) printf 'Установить / обновить PixelCat NaiveProxy' ;; fa:menu_1) printf 'نصب / به‌روزرسانی PixelCat NaiveProxy' ;; *:menu_1) printf '安装 / 更新 PixelCat NaiveProxy' ;;
+    ru:menu_2) printf 'Установить / обновить PixelCat Hysteria2' ;; fa:menu_2) printf 'نصب / به‌روزرسانی PixelCat Hysteria2' ;; *:menu_2) printf '安装 / 更新 PixelCat Hysteria2' ;;
+    ru:menu_3) printf 'Удалить PixelCat NaiveProxy' ;; fa:menu_3) printf 'حذف PixelCat NaiveProxy' ;; *:menu_3) printf '卸载 PixelCat NaiveProxy' ;;
+    ru:menu_4) printf 'Удалить PixelCat Hysteria2' ;; fa:menu_4) printf 'حذف PixelCat Hysteria2' ;; *:menu_4) printf '卸载 PixelCat Hysteria2' ;;
+    ru:menu_5) printf 'Включить BBR' ;; fa:menu_5) printf 'فعال‌کردن BBR' ;; *:menu_5) printf '一键开启 BBR' ;;
+    ru:menu_6) printf 'Проверка качества IP' ;; fa:menu_6) printf 'بررسی کیفیت IP' ;; *:menu_6) printf 'IP 质量检测' ;;
+    ru:menu_7) printf 'Проверка разблокировки стриминга' ;; fa:menu_7) printf 'بررسی دسترسی سرویس‌های پخش' ;; *:menu_7) printf '流媒体解锁检测' ;;
+    ru:menu_8) printf 'Качество сети / обратный маршрут' ;; fa:menu_8) printf 'کیفیت شبکه / مسیر بازگشت' ;; *:menu_8) printf '网络质量 / 回程检测' ;;
+    ru:menu_0) printf 'Выход' ;; fa:menu_0) printf 'خروج' ;; *:menu_0) printf '退出' ;;
+    ru:choose_option) printf 'Выберите пункт [1-8/0]: ' ;; fa:choose_option) printf 'یک گزینه انتخاب کنید [1-8/0]: ' ;; *:choose_option) printf '请输入选项 [1-8/0]: ' ;;
+    ru:choose_language) printf 'Выберите язык / Select language / انتخاب زبان' ;; fa:choose_language) printf 'انتخاب زبان / Select language / Выберите язык' ;; *:choose_language) printf '请选择语言 / Select language / Выберите язык' ;;
+    ru:invalid_option) printf 'Неверный пункт.' ;; fa:invalid_option) printf 'گزینه نامعتبر است.' ;; *:invalid_option) printf '无效选项。' ;;
+    ru:exited) printf 'Выход выполнен.' ;; fa:exited) printf 'خارج شد.' ;; *:exited) printf '已退出。' ;;
+    ru:cancelled) printf 'Отменено.' ;; fa:cancelled) printf 'لغو شد.' ;; *:cancelled) printf '已取消。' ;;
+    ru:confirm_purge_naive) printf 'Также удалить конфигурацию и сертификаты? [y/N]: ' ;; fa:confirm_purge_naive) printf 'پیکربندی و گواهی‌ها نیز حذف شوند؟ [y/N]: ' ;; *:confirm_purge_naive) printf '是否同时删除配置和证书数据?[y/N]: ' ;;
+    ru:confirm_purge_hy2) printf 'Также удалить конфигурацию и сертификаты Hysteria2? [y/N]: ' ;; fa:confirm_purge_hy2) printf 'پیکربندی و گواهی‌های Hysteria2 نیز حذف شوند؟ [y/N]: ' ;; *:confirm_purge_hy2) printf '是否同时删除 Hysteria2 配置和证书数据?[y/N]: ' ;;
+    ru:prompt_domain) printf 'Домен прокси, например proxy.example.com' ;; fa:prompt_domain) printf 'دامنه پراکسی، مانند proxy.example.com' ;; *:prompt_domain) printf '请输入代理域名，例如 proxy.example.com' ;;
+    ru:prompt_username) printf 'Имя пользователя прокси' ;; fa:prompt_username) printf 'نام کاربری پراکسی' ;; *:prompt_username) printf '请输入代理用户名' ;;
+    ru:prompt_password) printf 'Пароль прокси' ;; fa:prompt_password) printf 'گذرواژه پراکسی' ;; *:prompt_password) printf '请输入代理密码' ;;
+    ru:prompt_decoy) printf 'Домен сайта-маскировки, например www.example.com' ;; fa:prompt_decoy) printf 'دامنه سایت پوششی، مانند www.example.com' ;; *:prompt_decoy) printf '请输入伪装网站域名，例如 www.example.com' ;;
+    ru:prompt_email) printf 'Email для сертификата' ;; fa:prompt_email) printf 'ایمیل گواهی' ;; *:prompt_email) printf '请输入证书邮箱' ;;
+    ru:prompt_http) printf 'HTTP-порт' ;; fa:prompt_http) printf 'پورت HTTP' ;; *:prompt_http) printf '请输入 HTTP 端口' ;;
+    ru:prompt_https) printf 'HTTPS-порт' ;; fa:prompt_https) printf 'پورت HTTPS' ;; *:prompt_https) printf '请输入 HTTPS 端口' ;;
+    ru:prompt_hy2_domain) printf 'Домен Hysteria2' ;; fa:prompt_hy2_domain) printf 'دامنه Hysteria2' ;; *:prompt_hy2_domain) printf '请输入 Hysteria2 域名' ;;
+    ru:prompt_hy2_password) printf 'Пароль Hysteria2' ;; fa:prompt_hy2_password) printf 'گذرواژه Hysteria2' ;; *:prompt_hy2_password) printf '请输入 Hysteria2 密码' ;;
+    ru:prompt_hy2_port) printf 'UDP-порт Hysteria2' ;; fa:prompt_hy2_port) printf 'پورت UDP برای Hysteria2' ;; *:prompt_hy2_port) printf '请输入 Hysteria2 监听 UDP 端口' ;;
+    ru:prompt_hop) printf 'Диапазон смены портов' ;; fa:prompt_hop) printf 'بازه پرش پورت' ;; *:prompt_hop) printf '请输入端口跳跃范围' ;;
+    ru:prompt_up) printf 'Лимит исходящей скорости, Мбит/с; 0 — без лимита' ;; fa:prompt_up) printf 'محدودیت سرعت آپلود Mbps؛ صفر یعنی نامحدود' ;; *:prompt_up) printf '请输入上行限速 Mbps，0 表示不限速' ;;
+    ru:prompt_down) printf 'Лимит входящей скорости, Мбит/с; 0 — без лимита' ;; fa:prompt_down) printf 'محدودیت سرعت دانلود Mbps؛ صفر یعنی نامحدود' ;; *:prompt_down) printf '请输入下行限速 Mbps，0 表示不限速' ;;
+    ru:prompt_masquerade) printf 'URL маскировки' ;; fa:prompt_masquerade) printf 'نشانی URL پوششی' ;; *:prompt_masquerade) printf '请输入伪装 URL' ;;
+    ru:optional_suffix) printf ', можно оставить пустым' ;; fa:optional_suffix) printf '، می‌تواند خالی باشد' ;; *:optional_suffix) printf '，可留空' ;;
+    ru:off_suffix) printf ', введите off для отключения' ;; fa:off_suffix) printf '، برای غیرفعال‌سازی off را وارد کنید' ;; *:off_suffix) printf '，输入 off 关闭' ;;
+    ru:hy2_reuse_password) printf 'Hysteria2 по умолчанию использует пароль NaiveProxy.' ;; fa:hy2_reuse_password) printf 'Hysteria2 به‌صورت پیش‌فرض از گذرواژه NaiveProxy استفاده می‌کند.' ;; *:hy2_reuse_password) printf 'Hysteria2 密码默认沿用 NaiveProxy 密码。' ;;
+    ru:env_written) printf 'Файл конфигурации записан.' ;; fa:env_written) printf 'فایل پیکربندی نوشته شد.' ;; *:env_written) printf '配置文件已写入。' ;;
+    *) printf '%s' "$key" ;;
+  esac
+}
+
+select_ui_language() {
+  local choice
+  [ "$UI_LANG_EXPLICIT" = "true" ] && return
+  [ -t 0 ] || return
+  printf '\n%b%s%b\n' "${C_BOLD}${C_CYAN}" "$(msg choose_language)" "$C_RESET"
+  printf '  1) 中文\n  2) Русский\n  3) فارسی\n'
+  read -r -p '> ' choice
+  case "$choice" in
+    2|ru|RU) UI_LANG="ru" ;;
+    3|fa|FA) UI_LANG="fa" ;;
+    *) UI_LANG="zh" ;;
+  esac
+}
+
+localize_runtime() {
+  local text="$1" tail
+  [ "$UI_LANG" = "zh" ] && { printf '%s' "$text"; return; }
+  case "${UI_LANG}:${text}" in
+    ru:正在安装基础依赖...) printf 'Установка основных зависимостей...' ;;
+    fa:正在安装基础依赖...) printf 'در حال نصب وابستگی‌های اصلی...' ;;
+    ru:正在启动\ PixelCat\ NaiveProxy\ systemd\ 服务...) printf 'Запуск службы PixelCat NaiveProxy systemd...' ;;
+    fa:正在启动\ PixelCat\ NaiveProxy\ systemd\ 服务...) printf 'در حال اجرای سرویس systemd برای PixelCat NaiveProxy...' ;;
+    ru:正在启动\ Hysteria2\ systemd\ 服务...) printf 'Запуск службы Hysteria2 systemd...' ;;
+    fa:正在启动\ Hysteria2\ systemd\ 服务...) printf 'در حال اجرای سرویس systemd برای Hysteria2...' ;;
+    ru:部署完成。) printf 'Развёртывание завершено.' ;;
+    fa:部署完成。) printf 'راه‌اندازی کامل شد.' ;;
+    ru:Hysteria2\ 部署完成。) printf 'Развёртывание Hysteria2 завершено.' ;;
+    fa:Hysteria2\ 部署完成。) printf 'راه‌اندازی Hysteria2 کامل شد.' ;;
+    ru:已生成配置,按要求未启动服务。) printf 'Конфигурация создана; служба не запущена по запросу.' ;;
+    fa:已生成配置,按要求未启动服务。) printf 'پیکربندی ساخته شد؛ طبق درخواست سرویس اجرا نشد.' ;;
+    ru:已生成\ Hysteria2\ 配置,按要求未启动服务。) printf 'Конфигурация Hysteria2 создана; служба не запущена.' ;;
+    fa:已生成\ Hysteria2\ 配置,按要求未启动服务。) printf 'پیکربندی Hysteria2 ساخته شد؛ سرویس اجرا نشد.' ;;
+    ru:NaiveProxy\ 卸载完成。) printf 'Удаление NaiveProxy завершено.' ;;
+    fa:NaiveProxy\ 卸载完成。) printf 'حذف NaiveProxy کامل شد.' ;;
+    ru:Hysteria2\ 卸载完成。) printf 'Удаление Hysteria2 завершено.' ;;
+    fa:Hysteria2\ 卸载完成。) printf 'حذف Hysteria2 کامل شد.' ;;
+    ru:正在开启\ BBR...) printf 'Включение BBR...' ;;
+    fa:正在开启\ BBR...) printf 'در حال فعال‌کردن BBR...' ;;
+    ru:BBR\ 已开启。) printf 'BBR включён.' ;;
+    fa:BBR\ 已开启。) printf 'BBR فعال شد.' ;;
+    ru:已取消。) printf 'Отменено.' ;;
+    fa:已取消。) printf 'لغو شد.' ;;
+    ru:无效的域名或\ IP,请重新输入。) printf 'Неверный домен или IP. Повторите ввод.' ;;
+    fa:无效的域名或\ IP,请重新输入。) printf 'دامنه یا IP نامعتبر است؛ دوباره وارد کنید.' ;;
+    ru:邮箱格式无效,请重新输入。) printf 'Неверный формат email. Повторите ввод.' ;;
+    fa:邮箱格式无效,请重新输入。) printf 'قالب ایمیل نامعتبر است؛ دوباره وارد کنید.' ;;
+    ru:端口必须是\ 1-65535\ 之间的整数,请重新输入。) printf 'Порт должен быть целым числом от 1 до 65535.' ;;
+    fa:端口必须是\ 1-65535\ 之间的整数,请重新输入。) printf 'پورت باید عددی بین 1 تا 65535 باشد.' ;;
+    ru:密码不能包含换行符、回车或制表符,请重新输入。) printf 'Пароль не должен содержать перевод строки или табуляцию.' ;;
+    fa:密码不能包含换行符、回车或制表符,请重新输入。) printf 'گذرواژه نباید شامل خط جدید یا tab باشد.' ;;
+    ru:用户名无效:*) printf 'Неверное имя пользователя. Разрешены 1–128 символов A-Z a-z 0-9 . _ ~ -.' ;;
+    fa:用户名无效:*) printf 'نام کاربری نامعتبر است. فقط 1 تا 128 نویسه A-Z a-z 0-9 . _ ~ - مجاز است.' ;;
+    ru:*不能为空。*) tail="${text%% *}"; printf '%s не может быть пустым.' "$tail" ;;
+    fa:*不能为空。*) tail="${text%% *}"; printf '%s نمی‌تواند خالی باشد.' "$tail" ;;
+    ru:正在下载预编译\ PixelCat\ Caddy:*) printf 'Загрузка готовой сборки PixelCat Caddy: %s' "${text#*:}" ;;
+    fa:正在下载预编译\ PixelCat\ Caddy:*) printf 'در حال دریافت نسخه آماده PixelCat Caddy: %s' "${text#*:}" ;;
+    ru:已安装预编译\ PixelCat\ Caddy:*) printf 'Готовая сборка PixelCat Caddy установлена: %s' "${text#*:}" ;;
+    fa:已安装预编译\ PixelCat\ Caddy:*) printf 'نسخه آماده PixelCat Caddy نصب شد: %s' "${text#*:}" ;;
+    ru:正在安装\ Go:*) printf 'Установка Go: %s' "${text#*:}" ;;
+    fa:正在安装\ Go:*) printf 'در حال نصب Go: %s' "${text#*:}" ;;
+    ru:正在安装\ xcaddy:*) printf 'Установка xcaddy: %s' "${text#*:}" ;;
+    fa:正在安装\ xcaddy:*) printf 'در حال نصب xcaddy: %s' "${text#*:}" ;;
+    ru:正在编译\ PixelCat\ Caddy:*) printf 'Сборка PixelCat Caddy: %s' "${text#*:}" ;;
+    fa:正在编译\ PixelCat\ Caddy:*) printf 'در حال ساخت PixelCat Caddy: %s' "${text#*:}" ;;
+    ru:正在创建系统用户*) printf 'Создание системного пользователя %s' "${text#*用户 }" ;;
+    fa:正在创建系统用户*) printf 'در حال ساخت کاربر سیستمی %s' "${text#*用户 }" ;;
+    ru:检测到\ PixelCat\ NaiveProxy\ 已存在,*) printf 'Обнаружен существующий PixelCat NaiveProxy; служба и каталог сертификатов будут использованы повторно.' ;;
+    fa:检测到\ PixelCat\ NaiveProxy\ 已存在,*) printf 'PixelCat NaiveProxy موجود شناسایی شد؛ سرویس و پوشه گواهی دوباره استفاده می‌شوند.' ;;
+    ru:正在下载\ Hysteria2:*) printf 'Загрузка Hysteria2: %s' "${text#*:}" ;;
+    fa:正在下载\ Hysteria2:*) printf 'در حال دریافت Hysteria2: %s' "${text#*:}" ;;
+    ru:已安装\ Hysteria2:*) printf 'Hysteria2 установлен: %s' "${text#*:}" ;;
+    fa:已安装\ Hysteria2:*) printf 'Hysteria2 نصب شد: %s' "${text#*:}" ;;
+    ru:正在安装\ nftables...) printf 'Установка nftables...' ;;
+    fa:正在安装\ nftables...) printf 'در حال نصب nftables...' ;;
+    ru:服务状态:*) printf 'Состояние службы:%s' "${text#*:}" ;;
+    fa:服务状态:*) printf 'وضعیت سرویس:%s' "${text#*:}" ;;
+    ru:NaiveProxy\ 服务状态:*) printf 'Состояние NaiveProxy:%s' "${text#*:}" ;;
+    fa:NaiveProxy\ 服务状态:*) printf 'وضعیت NaiveProxy:%s' "${text#*:}" ;;
+    ru:查看日志:*) printf 'Журнал:%s' "${text#*:}" ;;
+    fa:查看日志:*) printf 'گزارش‌ها:%s' "${text#*:}" ;;
+    ru:端口跳跃:*) printf 'Смена портов:%s' "${text#*:}" ;;
+    fa:端口跳跃:*) printf 'پرش پورت:%s' "${text#*:}" ;;
+    ru:证书来源:*) printf 'Источник сертификата:%s' "${text#*:}" ;;
+    fa:证书来源:*) printf 'منبع گواهی:%s' "${text#*:}" ;;
+    ru:正在移除\ NaiveProxy\ 转发配置...) printf 'Удаление конфигурации NaiveProxy...' ;;
+    fa:正在移除\ NaiveProxy\ 转发配置...) printf 'در حال حذف پیکربندی NaiveProxy...' ;;
+    ru:正在停止并删除\ Hysteria2\ systemd\ 服务...) printf 'Остановка и удаление службы Hysteria2 systemd...' ;;
+    fa:正在停止并删除\ Hysteria2\ systemd\ 服务...) printf 'در حال توقف و حذف سرویس systemd مربوط به Hysteria2...' ;;
+    *) printf '%s' "$text" ;;
+  esac
+}
+
 info() {
-  printf '%b%s%b\n' "$C_BLUE" "$1" "$C_RESET"
+  printf '%b%s%b\n' "$C_BLUE" "$(localize_runtime "$1")" "$C_RESET"
 }
 
 success() {
-  printf '%b%s%b\n' "$C_GREEN" "$1" "$C_RESET"
+  printf '%b%s%b\n' "$C_GREEN" "$(localize_runtime "$1")" "$C_RESET"
 }
 
 warn() {
-  printf '%b%s%b\n' "$C_YELLOW" "$1" "$C_RESET" >&2
+  printf '%b%s%b\n' "$C_YELLOW" "$(localize_runtime "$1")" "$C_RESET" >&2
 }
 
 error() {
-  printf '%b%s%b\n' "$C_RED" "$1" "$C_RESET" >&2
+  printf '%b%s%b\n' "$C_RED" "$(localize_runtime "$1")" "$C_RESET" >&2
 }
 
 big_title() {
@@ -116,11 +272,102 @@ section_title() {
 }
 
 usage() {
-  cat <<'USAGE'
+  case "$UI_LANG" in
+    ru)
+      cat <<'USAGE'
+Установщик PixelCat (NaiveProxy + Hysteria2)
+
+Использование:
+  ./deploy.sh                          показать интерактивное меню
+  ./deploy.sh --lang ru                выбрать язык: zh, ru или fa
+  ./deploy.sh --install                установить / обновить NaiveProxy
+  ./deploy.sh --install-hysteria2      установить / обновить Hysteria2
+  ./deploy.sh --uninstall              удалить NaiveProxy
+  ./deploy.sh --uninstall-hysteria2    удалить Hysteria2
+  ./deploy.sh --bbr                    включить BBR
+  ./deploy.sh --ip-quality             проверить качество IP
+  ./deploy.sh --unlock-check           проверить стриминговые сервисы
+  ./deploy.sh --net-quality            проверить сеть / обратный маршрут
+
+Общие параметры:
+      --lang LANG       язык интерфейса: zh, ru, fa
+      --purge           удалить локальную конфигурацию вместе с сервисом
+  -y, --yes             подтверждать перезапись автоматически
+      --skip-start      создать конфигурацию без запуска сервиса
+  -h, --help            показать справку
+
+NaiveProxy:
+  -d, --domain          домен прокси, обязательно
+  -u, --username        имя пользователя, обязательно
+  -p, --password        пароль, обязательно
+      --decoy-domain    домен сайта-маскировки, обязательно
+  -e, --email           email Let's Encrypt, необязательно
+      --http-port       HTTP-порт, по умолчанию 80
+      --https-port      HTTPS-порт, по умолчанию 443
+      --build-from-source  собрать Caddy локально
+
+Hysteria2:
+      --hy2-domain      домен Hysteria2
+      --hy2-password    пароль клиента; пусто — создать автоматически
+      --hy2-port        UDP-порт, по умолчанию 443
+      --hy2-hop-range   диапазон смены портов, например 20000-50000; off отключает
+      --hy2-hop-iface   сетевой интерфейс для смены портов
+      --hy2-up-mbps     лимит исходящей скорости, 0 — без лимита
+      --hy2-down-mbps   лимит входящей скорости, 0 — без лимита
+      --hy2-masquerade  URL маскировки, по умолчанию https://www.bing.com
+USAGE
+      ;;
+    fa)
+      cat <<'USAGE'
+نصب‌کننده پیکسل‌کت (NaiveProxy + Hysteria2)
+
+روش استفاده:
+  ./deploy.sh                          نمایش منوی تعاملی
+  ./deploy.sh --lang fa                انتخاب زبان: zh، ru یا fa
+  ./deploy.sh --install                نصب / به‌روزرسانی NaiveProxy
+  ./deploy.sh --install-hysteria2      نصب / به‌روزرسانی Hysteria2
+  ./deploy.sh --uninstall              حذف NaiveProxy
+  ./deploy.sh --uninstall-hysteria2    حذف Hysteria2
+  ./deploy.sh --bbr                    فعال‌کردن BBR
+  ./deploy.sh --ip-quality             بررسی کیفیت IP
+  ./deploy.sh --unlock-check           بررسی سرویس‌های پخش
+  ./deploy.sh --net-quality            بررسی شبکه / مسیر بازگشت
+
+گزینه‌های عمومی:
+      --lang LANG       زبان رابط: zh، ru، fa
+      --purge           حذف پیکربندی محلی همراه سرویس
+  -y, --yes             تأیید خودکار بازنویسی
+      --skip-start      فقط ساخت پیکربندی، بدون اجرای سرویس
+  -h, --help            نمایش راهنما
+
+NaiveProxy:
+  -d, --domain          دامنه پراکسی، الزامی
+  -u, --username        نام کاربری، الزامی
+  -p, --password        گذرواژه، الزامی
+      --decoy-domain    دامنه سایت پوششی، الزامی
+  -e, --email           ایمیل Let's Encrypt، اختیاری
+      --http-port       پورت HTTP، پیش‌فرض 80
+      --https-port      پورت HTTPS، پیش‌فرض 443
+      --build-from-source  ساخت محلی Caddy
+
+Hysteria2:
+      --hy2-domain      دامنه Hysteria2
+      --hy2-password    گذرواژه کلاینت؛ خالی یعنی ساخت خودکار
+      --hy2-port        پورت UDP، پیش‌فرض 443
+      --hy2-hop-range   بازه پرش پورت مانند 20000-50000؛ off برای غیرفعال‌سازی
+      --hy2-hop-iface   رابط شبکه پرش پورت
+      --hy2-up-mbps     محدودیت آپلود؛ صفر یعنی نامحدود
+      --hy2-down-mbps   محدودیت دانلود؛ صفر یعنی نامحدود
+      --hy2-masquerade  URL پوششی، پیش‌فرض https://www.bing.com
+USAGE
+      ;;
+    *)
+      cat <<'USAGE'
 PixelCat 一键脚本(NaiveProxy + Hysteria2)
 
 用法:
-  ./deploy.sh                          显示中文菜单
+  ./deploy.sh                          显示交互菜单
+  ./deploy.sh --lang zh                选择界面语言：zh、ru 或 fa
   ./deploy.sh --install                安装或更新 PixelCat NaiveProxy
   ./deploy.sh --install-hysteria2      安装或更新 PixelCat Hysteria2
   ./deploy.sh --uninstall              卸载 PixelCat NaiveProxy
@@ -130,6 +377,7 @@ PixelCat 一键脚本(NaiveProxy + Hysteria2)
   ./deploy.sh --unlock-check           运行流媒体解锁检测
   ./deploy.sh --net-quality            运行网络质量 / 回程检测
 通用选项:
+      --lang LANG       界面语言：zh、ru、fa
       --purge           配合 --uninstall* 一起清理本地 .env;Hysteria2 会额外删除自身配置和证书数据
   -y, --yes             自动确认覆盖配置
       --skip-start      只生成配置,不启动服务
@@ -156,6 +404,8 @@ Hysteria2 选项:
       --hy2-down-mbps   下行限速 Mbps,默认 0(无限)
       --hy2-masquerade  伪装目标 URL,默认 https://www.bing.com
 USAGE
+      ;;
+  esac
 }
 
 require_option_value() {
@@ -169,6 +419,16 @@ require_option_value() {
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --lang)
+      require_option_value "$1" "${2:-}"
+      if ! UI_LANG="$(normalize_ui_lang "${2:-}")"; then
+        error "Unsupported language: ${2:-}. Use zh, ru, or fa."
+        exit 1
+      fi
+      UI_LANG_EXPLICIT="true"
+      export PIXELCAT_LANG="$UI_LANG"
+      shift 2
+      ;;
     --install)
       ACTION="install"
       shift
@@ -583,7 +843,7 @@ prompt_optional_email() {
   fi
 
   while true; do
-    read -r -p "$(color_prompt "$label,可留空: ")" input
+    read -r -p "$(color_prompt "${label}$(msg optional_suffix): ")" input
     if [ -z "$input" ]; then
       printf '%s' ""
       return
@@ -1489,7 +1749,7 @@ prompt_optional_hop_range() {
   fi
 
   while true; do
-    read -r -p "$(color_prompt "$label [$default_value,输入 off 关闭]: ")" input
+    read -r -p "$(color_prompt "$label [$default_value$(msg off_suffix)]: ")" input
     input="${input:-$default_value}"
     if [ "$input" = "off" ] || [ "$input" = "OFF" ]; then
       printf '%s' ""
@@ -2006,12 +2266,12 @@ do_install_hysteria2() {
   if [ -z "$HY2_DOMAIN" ] && [ -n "$DOMAIN" ]; then
     HY2_DOMAIN="$DOMAIN"
   fi
-  HY2_DOMAIN="$(prompt_host HY2_DOMAIN "请输入 Hysteria2 域名" "$HY2_DOMAIN")"
+  HY2_DOMAIN="$(prompt_host HY2_DOMAIN "$(msg prompt_hy2_domain)" "$HY2_DOMAIN")"
 
   if [ -z "$HY2_PASSWORD" ]; then
     if [ -n "$PASSWORD" ]; then
       HY2_PASSWORD="$PASSWORD"
-      info "Hysteria2 密码默认沿用 NaiveProxy 密码。"
+      info "$(msg hy2_reuse_password)"
     else
       local generated keep
       generated="$(generate_password)"
@@ -2024,11 +2284,11 @@ do_install_hysteria2() {
       fi
     fi
   else
-    HY2_PASSWORD="$(prompt_password HY2_PASSWORD "请输入 Hysteria2 密码" "$HY2_PASSWORD")"
+    HY2_PASSWORD="$(prompt_password HY2_PASSWORD "$(msg prompt_hy2_password)" "$HY2_PASSWORD")"
   fi
 
-  HY2_PORT="$(prompt_optional_port HY2_PORT "请输入 Hysteria2 监听 UDP 端口" "$HY2_PORT" "443")"
-  HY2_HOP_RANGE="$(prompt_optional_hop_range HY2_HOP_RANGE "请输入端口跳跃范围" "$HY2_HOP_RANGE" "$HY2_DEFAULT_HOP_RANGE")"
+  HY2_PORT="$(prompt_optional_port HY2_PORT "$(msg prompt_hy2_port)" "$HY2_PORT" "443")"
+  HY2_HOP_RANGE="$(prompt_optional_hop_range HY2_HOP_RANGE "$(msg prompt_hop)" "$HY2_HOP_RANGE" "$HY2_DEFAULT_HOP_RANGE")"
 
   if [ -n "$HY2_HOP_RANGE" ]; then
     if [ -z "$HY2_HOP_IFACE" ]; then
@@ -2045,12 +2305,12 @@ do_install_hysteria2() {
     fi
   fi
 
-  HY2_UP_MBPS="$(prompt_optional_mbps HY2_UP_MBPS "请输入上行限速 Mbps,0 表示不限速" "$HY2_UP_MBPS" "0")"
-  HY2_DOWN_MBPS="$(prompt_optional_mbps HY2_DOWN_MBPS "请输入下行限速 Mbps,0 表示不限速" "$HY2_DOWN_MBPS" "0")"
+  HY2_UP_MBPS="$(prompt_optional_mbps HY2_UP_MBPS "$(msg prompt_up)" "$HY2_UP_MBPS" "0")"
+  HY2_DOWN_MBPS="$(prompt_optional_mbps HY2_DOWN_MBPS "$(msg prompt_down)" "$HY2_DOWN_MBPS" "0")"
   if [ -z "$HY2_MASQUERADE_URL" ] && [ -n "$DECOY_DOMAIN" ]; then
     HY2_MASQUERADE_URL="https://$DECOY_DOMAIN"
   fi
-  HY2_MASQUERADE_URL="$(prompt_optional_url HY2_MASQUERADE_URL "请输入伪装 URL" "$HY2_MASQUERADE_URL" "$HY2_DEFAULT_MASQUERADE_URL")"
+  HY2_MASQUERADE_URL="$(prompt_optional_url HY2_MASQUERADE_URL "$(msg prompt_masquerade)" "$HY2_MASQUERADE_URL" "$HY2_DEFAULT_MASQUERADE_URL")"
 
   if [ "$HY2_PASSWORD_FROM_ARG" = "true" ]; then
     warn "警告:通过 --hy2-password 传入密码可能会被 shell 历史或进程列表记录。"
@@ -2085,7 +2345,7 @@ do_install_hysteria2() {
 
   chmod 600 .env.hysteria2
   echo
-  success ".env.hysteria2 已写入。"
+success ".env.hysteria2 — $(msg env_written)"
 
   ensure_caddy_for_certificates "$HY2_DOMAIN" "$HY2_MASQUERADE_URL"
   install_hysteria2
@@ -2093,6 +2353,8 @@ do_install_hysteria2() {
 
 show_menu() {
   local choice
+
+  select_ui_language
 
   while true; do
     printf '\n%b' "$C_CYAN"
@@ -2108,23 +2370,23 @@ show_menu() {
 MENU
     printf '%b\n\n' "$C_RESET"
     big_title
-    printf '%b一键脚本(NaiveProxy + Hysteria2)%b\n\n' "${C_BOLD}${C_MAGENTA}" "$C_RESET"
-    printf '%b像素猫 - 科学上网ICU%b\n' "${C_BOLD}${C_GREEN}" "$C_RESET"
-    printf '%b中文教程博客,整理科学上网、网络诊断、节点维护与隐私安全的实用经验。%b\n\n' "$C_DIM" "$C_RESET"
-    printf '%b官网:%b %s\n' "$C_YELLOW" "$C_RESET" "https://pixelcat.icu"
+    printf '%b%s%b\n\n' "${C_BOLD}${C_MAGENTA}" "$(msg script_title)" "$C_RESET"
+    printf '%bPixelCat ICU%b\n' "${C_BOLD}${C_GREEN}" "$C_RESET"
+    printf '%b%s%b\n\n' "$C_DIM" "$(msg blog_intro)" "$C_RESET"
+    printf '%b%s:%b %s\n' "$C_YELLOW" "$(msg website)" "$C_RESET" "https://pixelcat.icu"
     printf '%bYouTube:%b %s\n' "$C_YELLOW" "$C_RESET" "https://www.youtube.com/@PixelCatICU"
     printf '%bGitHub:%b %s\n' "$C_YELLOW" "$C_RESET" "https://github.com/PixelCatICU"
     printf '%bX:%b %s\n\n' "$C_YELLOW" "$C_RESET" "https://x.com/PixelCatICU"
-    printf '%b1)%b 安装 / 更新 PixelCat NaiveProxy\n' "$C_GREEN" "$C_RESET"
-    printf '%b2)%b 安装 / 更新 PixelCat Hysteria2\n' "$C_GREEN" "$C_RESET"
-    printf '%b3)%b 卸载 PixelCat NaiveProxy\n' "$C_RED" "$C_RESET"
-    printf '%b4)%b 卸载 PixelCat Hysteria2\n' "$C_RED" "$C_RESET"
-    printf '%b5)%b 一键开启 BBR\n' "$C_BLUE" "$C_RESET"
-    printf '%b6)%b IP 质量检测           %b(xykt/IPQuality)%b\n' "$C_BLUE" "$C_RESET" "$C_DIM" "$C_RESET"
-    printf '%b7)%b 流媒体解锁检测         %b(lmc999/RegionRestrictionCheck)%b\n' "$C_BLUE" "$C_RESET" "$C_DIM" "$C_RESET"
-    printf '%b8)%b 网络质量 / 回程检测     %b(xykt/NetQuality)%b\n' "$C_BLUE" "$C_RESET" "$C_DIM" "$C_RESET"
-    printf '%b0)%b 退出\n\n' "$C_DIM" "$C_RESET"
-    read -r -p "$(color_prompt "请输入选项 [1-8/0]: ")" choice
+    printf '%b1)%b %s\n' "$C_GREEN" "$C_RESET" "$(msg menu_1)"
+    printf '%b2)%b %s\n' "$C_GREEN" "$C_RESET" "$(msg menu_2)"
+    printf '%b3)%b %s\n' "$C_RED" "$C_RESET" "$(msg menu_3)"
+    printf '%b4)%b %s\n' "$C_RED" "$C_RESET" "$(msg menu_4)"
+    printf '%b5)%b %s\n' "$C_BLUE" "$C_RESET" "$(msg menu_5)"
+    printf '%b6)%b %-34s %b(xykt/IPQuality)%b\n' "$C_BLUE" "$C_RESET" "$(msg menu_6)" "$C_DIM" "$C_RESET"
+    printf '%b7)%b %-34s %b(lmc999/RegionRestrictionCheck)%b\n' "$C_BLUE" "$C_RESET" "$(msg menu_7)" "$C_DIM" "$C_RESET"
+    printf '%b8)%b %-34s %b(xykt/NetQuality)%b\n' "$C_BLUE" "$C_RESET" "$(msg menu_8)" "$C_DIM" "$C_RESET"
+    printf '%b0)%b %s\n\n' "$C_DIM" "$C_RESET" "$(msg menu_0)"
+    read -r -p "$(color_prompt "$(msg choose_option)")" choice
     case "$choice" in
       1)
         ACTION="install"
@@ -2137,7 +2399,7 @@ MENU
       3)
         ACTION="uninstall"
         if [ "$ASSUME_YES" != "true" ]; then
-          read -r -p "$(color_prompt "是否同时删除配置和证书数据?[y/N]: ")" purge_confirm
+          read -r -p "$(color_prompt "$(msg confirm_purge_naive)")" purge_confirm
           case "$purge_confirm" in
             y|Y|yes|YES)
               PURGE="true"
@@ -2149,7 +2411,7 @@ MENU
       4)
         ACTION="uninstall-hysteria2"
         if [ "$ASSUME_YES" != "true" ]; then
-          read -r -p "$(color_prompt "是否同时删除 Hysteria2 配置和证书数据?[y/N]: ")" purge_confirm
+          read -r -p "$(color_prompt "$(msg confirm_purge_hy2)")" purge_confirm
           case "$purge_confirm" in
             y|Y|yes|YES)
               PURGE="true"
@@ -2175,11 +2437,11 @@ MENU
         return
         ;;
       0)
-        success "已退出。"
+        success "$(msg exited)"
         exit 0
         ;;
       *)
-        error "无效选项。"
+        error "$(msg invalid_option)"
         ;;
     esac
   done
@@ -2229,13 +2491,13 @@ if [ "$ACTION" = "install" ]; then
   load_naive_env_defaults
 fi
 
-DOMAIN="$(prompt_host DOMAIN "请输入代理域名,例如 proxy.example.com" "$DOMAIN")"
-USERNAME="$(prompt_username USERNAME "请输入代理用户名" "$USERNAME")"
-PASSWORD="$(prompt_password PASSWORD "请输入代理密码" "$PASSWORD")"
-DECOY_DOMAIN="$(prompt_host DECOY_DOMAIN "请输入伪装网站域名,例如 www.example.com" "$DECOY_DOMAIN")"
-EMAIL="$(prompt_optional_email EMAIL "请输入证书邮箱" "$EMAIL")"
-HTTP_PORT="$(prompt_optional_port HTTP_PORT "请输入 HTTP 端口" "$HTTP_PORT" "80")"
-HTTPS_PORT="$(prompt_optional_port HTTPS_PORT "请输入 HTTPS 端口" "$HTTPS_PORT" "443")"
+DOMAIN="$(prompt_host DOMAIN "$(msg prompt_domain)" "$DOMAIN")"
+USERNAME="$(prompt_username USERNAME "$(msg prompt_username)" "$USERNAME")"
+PASSWORD="$(prompt_password PASSWORD "$(msg prompt_password)" "$PASSWORD")"
+DECOY_DOMAIN="$(prompt_host DECOY_DOMAIN "$(msg prompt_decoy)" "$DECOY_DOMAIN")"
+EMAIL="$(prompt_optional_email EMAIL "$(msg prompt_email)" "$EMAIL")"
+HTTP_PORT="$(prompt_optional_port HTTP_PORT "$(msg prompt_http)" "$HTTP_PORT" "80")"
+HTTPS_PORT="$(prompt_optional_port HTTPS_PORT "$(msg prompt_https)" "$HTTPS_PORT" "443")"
 
 if [ "$PASSWORD_FROM_ARG" = "true" ]; then
   warn "警告:通过 --password 传入密码可能会被 shell 历史或进程列表记录。"
@@ -2280,6 +2542,6 @@ fi
 chmod 600 .env
 
 echo
-success ".env 已写入。"
+success ".env — $(msg env_written)"
 
 install_stack
