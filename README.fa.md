@@ -1,112 +1,120 @@
-<p align="center">
-  <img src="./pixel-cat.svg" alt="PixelCat" width="120" />
-</p>
+<p align="center"><img src="./pixel-cat.svg" alt="PixelCat" width="120" /></p>
 
 # PixelCat Proxy
 
 [中文](README.md) | [Русский](README.ru.md) | **فارسی**
 
-PixelCat Proxy یک نصب‌کننده سه‌زبانه برای سرورهای لینوکس است. رابط برنامه به زبان‌های چینی، روسی و فارسی ارائه می‌شود و موارد زیر را نصب و نگهداری می‌کند:
+اسکریپت نصب و نگهداری NaiveProxy و Hysteria2 برای لینوکس، با منوی سه‌زبانه، ابزارهای بررسی شبکه و لینک دریافت یک‌بارمصرف sing-box.
 
-- **NaiveProxy**: کدی (Caddy) با افزونه `github.com/klzgrad/forwardproxy@naive`، TLS، پروکسی HTTP/2 CONNECT، احراز هویت، probe resistance و سایت پوششی.
-- **Hysteria2**: سرور رسمی Hysteria2 مبتنی بر QUIC/UDP همراه پرش پورت.
-- **ابزارهای عیب‌یابی**: BBR، کیفیت IP، دسترسی سرویس‌های پخش و مسیر بازگشت شبکه.
+## قابلیت‌ها و پیش‌نیازها
 
-از پروژه فقط به‌شکل قانونی استفاده کنید و قوانین محل، شرایط شرکت میزبانی و سیاست شبکه سازمان خود را رعایت کنید.
+- NaiveProxy: سرویس Caddy با `klzgrad/forwardproxy@naive`، TLS، HTTP/2 CONNECT، احراز هویت و سایت پوششی.
+- Hysteria2: سرور رسمی با پرش پورت UDP و استفاده مجدد از گواهی Caddy.
+- BBR، کیفیت IP، دسترسی سرویس‌های پخش و مسیر بازگشت.
+- لینک HTTPS تصادفی با اعتبار محدود و حداکثر یک دریافت.
 
-## معماری
+به Linux، Bash، systemd و root یا sudo نیاز است؛ amd64 و arm64 پشتیبانی می‌شوند. Debian، Ubuntu و خانواده RHEL / Fedora همراه systemd مناسب‌اند. Alpine معمولی با OpenRC برای مدیریت سرویس‌ها مناسب نیست. لینک یک‌بارمصرف به Python 3.7+، فایل `one_time_link.py` از پروژه کامل و سرویس فعال PixelCat Caddy HTTPS نیاز دارد.
 
-| بخش | سرویس | پروتکل | پورت پیش‌فرض |
-| --- | --- | --- | --- |
-| NaiveProxy | `pixelcat-naiveproxy.service` | HTTPS/TCP | `443/tcp` |
-| Hysteria2 | `pixelcat-hysteria2.service` | QUIC/UDP | `443/udp` |
-| پرش پورت | `pixelcat-hysteria2-hop.service` | UDP DNAT | `20000-50000/udp` |
+رکورد A/AAAA را به سرور وصل و پورت‌ها را در فایروال سیستم و ابر باز کنید:
 
-NaiveProxy و Hysteria2 می‌توانند از یک دامنه و شماره پورت استفاده کنند، زیرا اولی TCP و دومی UDP است.
+| کاربرد | پورت |
+| --- | --- |
+| HTTP و گواهی | `80/tcp` |
+| NaiveProxy و دریافت پیکربندی | `443/tcp` |
+| Hysteria2 | `443/udp` |
+| پرش پورت اختیاری | `20000-50000/udp` |
 
-## پیش‌نیازها
+TCP و UDP می‌توانند دامنه و شماره پورت یکسان داشته باشند. سرویس دریافت تنها روی `127.0.0.1:18765` است؛ این پورت نیازی به دسترسی عمومی ندارد.
 
-- لینوکس همراه systemd؛ مانند Debian، Ubuntu، توزیع‌های خانواده RHEL، Fedora یا Alpine.
-- معماری `amd64` یا `arm64`.
-- رکورد `A` یا `AAAA` دامنه باید به سرور اشاره کند.
-- پورت‌های `80/tcp`، `443/tcp`، `443/udp` و در صورت استفاده از پرش پورت، `20000-50000/udp` را باز کنید.
-
-## نصب سریع
-
-اجرای مستقیم با رابط فارسی:
+## شروع سریع
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/PixelCatICU/pixelcat-proxy/main/install.sh | bash -s -- --lang fa
 ```
 
-اگر مخزن از قبل روی سرور است:
+پروژه کامل در `/opt/pixelcat/pixelcat-naiveproxy` دریافت می‌شود، `.env*` موجود حفظ می‌شود و منو باز می‌شود.
 
 ```bash
+cd /opt/pixelcat/pixelcat-naiveproxy
 ./deploy.sh --lang fa
-```
-
-روش جایگزین با متغیر محیطی:
-
-```bash
-PIXELCAT_LANG=fa ./deploy.sh
-```
-
-اگر `--lang` وارد نشود، حالت تعاملی ابتدا زبان را می‌پرسد. زبان پیش‌فرض حالت غیرتعاملی چینی است.
-
-## منو
-
-```text
-1) نصب / به‌روزرسانی PixelCat NaiveProxy
-2) نصب / به‌روزرسانی PixelCat Hysteria2
-3) حذف PixelCat NaiveProxy
-4) حذف PixelCat Hysteria2
-5) فعال‌کردن BBR
-6) بررسی کیفیت IP
-7) بررسی دسترسی سرویس‌های پخش
-8) کیفیت شبکه / مسیر بازگشت
-0) خروج
-```
-
-نمایش همه پارامترها:
-
-```bash
 ./deploy.sh --lang fa --help
 ```
 
-## نصب NaiveProxy
+زبان‌ها `zh`، `ru` و `fa` هستند؛ `PIXELCAT_LANG=fa ./deploy.sh` هم قابل استفاده است.
 
-در منو گزینه `1` را انتخاب کنید و دامنه، نام کاربری، گذرواژه قوی، دامنه سایت پوششی، ایمیل گواهی و پورت‌ها را وارد کنید. دامنه پوششی را بدون `https://` بنویسید.
+## منو
 
-نمونه غیرتعاملی:
+| گزینه | عملکرد |
+| --- | --- |
+| 1 / 2 | نصب یا به‌روزرسانی NaiveProxy / Hysteria2 |
+| 3 / 4 | حذف NaiveProxy / Hysteria2 |
+| 5 | فعال‌کردن BBR |
+| 6 | کیفیت IP |
+| 7 | دسترسی سرویس‌های پخش |
+| 8 | شبکه و مسیر بازگشت |
+| 9 | لینک یک‌بارمصرف sing-box |
+| 0 | خروج |
 
-```bash
-./deploy.sh --lang fa --install -y \
-  --domain proxy.example.com \
-  --username your_user \
-  --password change_this_strong_password \
-  --decoy-domain www.example.com \
-  --email admin@example.com
-```
+## نصب گره‌ها
 
-برای سرور عملیاتی بهتر است گذرواژه را تعاملی وارد کنید؛ مقدار `--password` ممکن است در تاریخچه shell یا فهرست پردازش‌ها باقی بماند.
-
-## نصب Hysteria2
-
-در منو گزینه `2` را انتخاب کنید. اگر NaiveProxy نصب باشد، اسکریپت می‌تواند دامنه، گذرواژه و گواهی کدی را دوباره استفاده کند.
+رمز را تعاملی وارد کنید تا در تاریخچه shell یا آرگومان پردازش نماند.
 
 ```bash
-./deploy.sh --lang fa --install-hysteria2 -y \
-  --hy2-domain proxy.example.com \
-  --hy2-port 443 \
-  --hy2-hop-range 20000-50000 \
-  --hy2-up-mbps 0 \
-  --hy2-down-mbps 0 \
-  --hy2-masquerade https://www.example.com
+./deploy.sh --lang fa --install
+./deploy.sh --lang fa --install-hysteria2
 ```
 
-`--hy2-hop-range off` پرش پورت را غیرفعال می‌کند. مقدار سرعت `0` به معنی نامحدود است.
+NaiveProxy به دامنه، نام کاربری، رمز و دامنه پوششی نیاز دارد؛ ایمیل اختیاری است. دامنه پوششی باید بدون پروتکل و متفاوت از دامنه پروکسی باشد.
 
-## بررسی سرویس‌ها
+Hysteria2 دامنه و رمز را در صورت وجود از `.env` مربوط به NaiveProxy می‌گیرد؛ در غیر این صورت دامنه را می‌پرسد و رمز می‌سازد. پیش‌فرض UDP 443، بازه 20000-50000، سرعت 0 (نامحدود) و سایت پوششی NaiveProxy یا https://www.bing.com است.
+
+```bash
+./deploy.sh --install-hysteria2 --hy2-hop-range off
+./deploy.sh --install --build-from-source
+./deploy.sh --install --skip-start
+```
+
+- `--hy2-hop-range off` پرش را غیرفعال می‌کند؛ `--hy2-hop-iface` رابط را مشخص می‌کند.
+- `--hy2-port`، `--hy2-up-mbps`، `--hy2-down-mbps` و `--hy2-masquerade` پیش‌فرض‌ها را عوض می‌کنند.
+- `--build-from-source` ساخت محلی Caddy با Go و xcaddy را اجباری می‌کند. نسخه آماده با SHA-256 و افزونه forward_proxy بررسی و در شکست، محلی ساخته می‌شود.
+- `--skip-start` تنظیمات را بدون شروع سرویس می‌سازد؛ برای Hysteria2 هم قابل استفاده است.
+
+ابتدا گواهی هم‌دامنه Caddy جست‌وجو و سپس صدور امتحان می‌شود. ACME جایگزین Hysteria2 به TCP 443 آزاد نیاز دارد. Caddy فعال بدون گواهی مناسب ممکن است بررسی دستی بخواهد. پرش پورت ابتدا nftables و سپس iptables را استفاده می‌کند.
+
+## کلاینت
+
+پس از نصب، JSON کامل sing-box چاپ می‌شود. شیء را با تمام آکولادها در `config.json` ذخیره و محلی وارد کنید.
+
+**ورودی mixed روی `127.0.0.1:2080` برای HTTP/SOCKS است؛ TUN/DNS موردنیاز VPN سراسری گوشی را ندارد و اشتراک Shadowrocket نیست.** نصب موفق سرویس اتصال کلاینت را تأیید نمی‌کند. JSON حاوی رمز است؛ عمومی نکنید.
+
+## دریافت یک‌بارمصرف
+
+در پوشه دارای `.env` / `.env.hysteria2` گزینه ۹ را انتخاب یا اجرا کنید:
+
+```bash
+cd /opt/pixelcat/pixelcat-naiveproxy
+./deploy.sh --lang fa --one-time-link
+./deploy.sh --lang fa --one-time-link --link-ttl 300
+```
+
+قالب: `https://proxy.example.com:443/pixelcat-once/<random-key>`.
+
+- اعتبار پیش‌فرض ۶۰۰ ثانیه و بازه مجاز ۳۰ تا ۳۶۰۰ ثانیه است.
+- اولین GET معتبر لینک را مصرف می‌کند، حتی اگر دانلود قطع شود. HEAD و کلید اشتباه مصرف نمی‌کنند.
+- لینک جدید قبلی را لغو می‌کند؛ هم‌زمان در چند ترمینال تولید نکنید.
+- نتیجه را محلی ذخیره کنید. لینک را پیش‌نمایش نکنید؛ تلاش مجدد یا تازه‌سازی اشتراک شکست می‌خورد.
+- گره‌های دارای فایل محیط و سرویس ادغام می‌شوند؛ NaiveProxy اولویت دارد. خروجی همان mixed JSON است.
+- لغو: `sudo systemctl stop pixelcat-once.service`.
+
+### رفتار سرویس
+
+کلید تصادفی ۲۵۶ بیتی است. فایل آماده‌سازی مجوز 0600 دارد و پس از خواندن حذف می‌شود؛ محتوا در حافظه می‌ماند. سرویس موقت پس از انقضا خارج می‌شود. مسیر درخواست ثبت نمی‌شود و پاسخ هدر منع کش دارد. لاگ و کش CDN یا پراکسی بالادستی را جداگانه بررسی کنید.
+
+Caddyfile اعتبارسنجی و پشتیبان‌گیری می‌شود و Caddy دوباره راه‌اندازی می‌شود؛ اتصال‌های جاری ممکن است قطع شوند. در شکست، بازگرداندن فایل و سرویس امتحان می‌شود. لاگ سفارشی یا مسیر ناسازگار مانع تغییر خودکار است. نصب یا حذف دوباره NaiveProxy فایل Caddyfile را بازنویسی می‌کند؛ در صورت نیاز لینک جدید بسازید.
+
+یک‌بارمصرف بودن مانع دریافت زودتر توسط دیگری نمی‌شود و رمز دانلودشده را پس نمی‌گیرد. در صورت افشا رمز گره را تغییر دهید.
+
+## نگهداری و حذف
 
 ```bash
 systemctl status pixelcat-naiveproxy --no-pager
@@ -114,24 +122,45 @@ systemctl status pixelcat-hysteria2 --no-pager
 systemctl status pixelcat-hysteria2-hop --no-pager
 journalctl -u pixelcat-naiveproxy -f
 journalctl -u pixelcat-hysteria2 -f
-ss -lntup
+systemctl restart pixelcat-naiveproxy
+systemctl restart pixelcat-hysteria2
 ```
 
-## به‌روزرسانی و حذف
+| داده | مسیر |
+| --- | --- |
+| متغیرها | `.env` و `.env.hysteria2` در پروژه |
+| Caddy | `/etc/pixelcat-naiveproxy/Caddyfile` و `/var/lib/pixelcat-naiveproxy` |
+| Hysteria2 | `/etc/pixelcat-hysteria2/config.yaml` و `/var/lib/pixelcat-hysteria2` |
+| برنامه دریافت | `/usr/local/bin/pixelcat-one-time-link.py` |
 
-اجرای دوباره `install.sh` نسخه تازه را دریافت می‌کند. برای حذف:
+اجرای دوباره نصب‌کننده اسکریپت‌ها را به‌روز می‌کند؛ سپس نصب سرویس را انتخاب کنید.
 
 ```bash
 ./deploy.sh --lang fa --uninstall
 ./deploy.sh --lang fa --uninstall-hysteria2
 ```
 
-فقط زمانی `--purge` را اضافه کنید که قصد حذف فایل‌های پیکربندی محلی و داده‌های ذکرشده در پیام تأیید را دارید.
+حذف NaiveProxy سرویس Caddy، گواهی و پوشش را نگه می‌دارد؛ `--purge` فایل محلی `.env` را حذف می‌کند. Hysteria2 تنظیمات و گواهی را نگه می‌دارد؛ `--purge` آن‌ها و `.env.hysteria2` را پاک می‌کند. سرویس دریافت را جداگانه متوقف کنید.
+
+## عیب‌یابی و توسعه
+
+```bash
+./deploy.sh --bbr
+./deploy.sh --ip-quality
+./deploy.sh --unlock-check
+./deploy.sh --net-quality
+bash tests/i18n-smoke.sh
+python3 -m unittest discover -s tests -p 'test_*.py'
+```
+
+منابع: [IPQuality](https://github.com/xykt/IPQuality)، [RegionRestrictionCheck](https://github.com/lmc999/RegionRestrictionCheck)، [NetQuality](https://github.com/xykt/NetQuality). قبل از اجرا URL و SHA-256 نمایش داده می‌شود؛ حالت تعاملی تأیید می‌خواهد و `-y` یا حالت غیرتعاملی خودکار ادامه می‌دهد.
+
+تست‌ها هم‌زمانی، کلید اشتباه، انقضا، HEAD/GET، ادغام JSON و تغییر متن Caddy را بررسی می‌کنند؛ جای آزمایش systemd، گواهی و اتصال واقعی در لینوکس را نمی‌گیرند.
+
+ساخت پیش‌فرض: Caddy `v2.11.4`، xcaddy `v0.4.5` و forwardproxy `naive`. متغیرها: `CADDY_VERSION`، `XCADDY_VERSION`، `CADDY_FORWARDPROXY_REF`. Release یا Actions دستی `Build PixelCat Caddy` آرشیو amd64/arm64 و فایل صحت‌سنجی می‌سازد.
 
 ## پیوندها
 
-- وب‌سایت: [pixelcat.icu](https://pixelcat.icu)
-- YouTube: [@PixelCatICU](https://www.youtube.com/@PixelCatICU)
-- GitHub: [PixelCatICU](https://github.com/PixelCatICU)
-- X: [@PixelCatICU](https://x.com/PixelCatICU)
-- مجوز: GNU GPL v3.0
+[وب‌سایت](https://pixelcat.icu) · [YouTube](https://www.youtube.com/@PixelCatICU) · [GitHub](https://github.com/PixelCatICU) · [X](https://x.com/PixelCatICU)
+
+مجوز: [GNU GPL v3.0](LICENSE).

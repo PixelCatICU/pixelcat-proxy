@@ -12,6 +12,7 @@ ASSUME_YES="false"
 SKIP_START="false"
 PASSWORD_FROM_ARG="false"
 ACTION="menu"
+LINK_TTL=600
 PURGE="false"
 UI_LANG="${PIXELCAT_LANG:-zh}"
 UI_LANG_EXPLICIT="false"
@@ -96,6 +97,9 @@ fi
 msg() {
   local key="$1"
   case "${UI_LANG}:${key}" in
+    ru:menu_9) printf 'Одноразовая ссылка sing-box (10 минут)' ;;
+    fa:menu_9) printf 'لینک یک‌بارمصرف sing-box (۱۰ دقیقه)' ;;
+    *:menu_9) printf '生成一次性 sing-box 配置链接（10 分钟）' ;;
     ru:script_title) printf 'Установщик PixelCat (NaiveProxy + Hysteria2)' ;;
     fa:script_title) printf 'نصب‌کننده پیکسل‌کت (NaiveProxy + Hysteria2)' ;;
     *:script_title) printf 'PixelCat 一键脚本 (NaiveProxy + Hysteria2)' ;;
@@ -408,6 +412,14 @@ USAGE
   esac
 }
 
+one_time_help() {
+  case "$UI_LANG" in
+    ru) printf '\n  --one-time-link       Одноразовая ссылка sing-box\n  --link-ttl SECONDS    Срок действия: 30–3600 с (600 по умолчанию)\n' ;;
+    fa) printf '\n  --one-time-link       لینک یک‌بارمصرف sing-box\n  --link-ttl SECONDS    اعتبار: ۳۰ تا ۳۶۰۰ ثانیه (پیش‌فرض ۶۰۰)\n' ;;
+    *) printf '\n  --one-time-link       生成一次性 sing-box 配置领取链接\n  --link-ttl SECONDS    有效期 30–3600 秒，默认 600 秒\n' ;;
+  esac
+}
+
 require_option_value() {
   local option="$1"
   local value="${2:-}"
@@ -419,6 +431,15 @@ require_option_value() {
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --one-time-link)
+      ACTION="one-time-link"
+      shift
+      ;;
+    --link-ttl)
+      require_option_value "$1" "${2:-}"
+      LINK_TTL="$2"
+      shift 2
+      ;;
     --lang)
       require_option_value "$1" "${2:-}"
       if ! UI_LANG="$(normalize_ui_lang "${2:-}")"; then
@@ -556,6 +577,7 @@ while [ "$#" -gt 0 ]; do
       ;;
     -h|--help)
       usage
+      one_time_help
       exit 0
       ;;
     *)
@@ -2385,9 +2407,14 @@ MENU
     printf '%b6)%b %-34s %b(xykt/IPQuality)%b\n' "$C_BLUE" "$C_RESET" "$(msg menu_6)" "$C_DIM" "$C_RESET"
     printf '%b7)%b %-34s %b(lmc999/RegionRestrictionCheck)%b\n' "$C_BLUE" "$C_RESET" "$(msg menu_7)" "$C_DIM" "$C_RESET"
     printf '%b8)%b %-34s %b(xykt/NetQuality)%b\n' "$C_BLUE" "$C_RESET" "$(msg menu_8)" "$C_DIM" "$C_RESET"
+    printf '%b9)%b %s\n' "$C_GREEN" "$C_RESET" "$(msg menu_9)"
     printf '%b0)%b %s\n\n' "$C_DIM" "$C_RESET" "$(msg menu_0)"
     read -r -p "$(color_prompt "$(msg choose_option)")" choice
     case "$choice" in
+      9)
+        ACTION="one-time-link"
+        return
+        ;;
       1)
         ACTION="install"
         return
@@ -2447,8 +2474,106 @@ MENU
   done
 }
 
+generate_one_time_link() {
+  need_linux
+  need_systemd
+  local helper state staged backup token key value link_host
+  helper="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/one_time_link.py"
+  if ! command -v python3 >/dev/null || [ ! -f "$helper" ]; then
+    error 'Requires python3 and one_time_link.py from the full PixelCat release.'
+    return 1
+  fi
+  if ! [[ "$LINK_TTL" =~ ^[0-9]{2,4}$ ]] || (( 10#$LINK_TTL < 30 || 10#$LINK_TTL > 3600 )); then
+    error '--link-ttl: 30–3600 seconds'
+    return 1
+  fi
+  LINK_TTL=$((10#$LINK_TTL))
+  load_naive_env_defaults
+  if [ -f .env.hysteria2 ]; then
+    for key in HY2_DOMAIN HY2_PASSWORD HY2_PORT HY2_HOP_RANGE HY2_UP_MBPS HY2_DOWN_MBPS; do
+      value="$(load_env_value .env.hysteria2 "$key")"
+      printf -v "$key" '%s' "$value"
+    done
+  fi
+  link_host="${DOMAIN:-$HY2_DOMAIN}"
+  if [ -z "$link_host" ] || ! run_as_root test -f "$INSTALL_DIR/Caddyfile"; then
+    error 'Install PixelCat HTTPS first; run this command in the directory containing .env / .env.hysteria2.'
+    return 1
+  fi
+  if ! run_as_root grep -Fq "$link_host" "$INSTALL_DIR/Caddyfile"; then
+    error 'Configuration domain does not match the installed Caddyfile.'
+    return 1
+  fi
+  state="$DATA_DIR/one-time-state.json"
+  staged="$INSTALL_DIR/Caddyfile.once-new"
+  backup="$INSTALL_DIR/Caddyfile.once-backup"
+  # Validate before stopping an existing claim or changing the live service.
+  run_as_root sh -c 'umask 077; python3 "$1" patch "$2" > "$3"' sh "$helper" "$INSTALL_DIR/Caddyfile" "$staged"
+  if ! run_as_root "$CADDY_BIN" validate --config "$staged" --adapter caddyfile >/dev/null; then
+    run_as_root rm -f "$staged"
+    return 1
+  fi
+  run_as_root systemctl stop pixelcat-once.service 2>/dev/null || true
+  run_as_root systemctl reset-failed pixelcat-once.service 2>/dev/null || true
+  run_as_root python3 -c 'import socket; s=socket.socket(); s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1); s.bind(("127.0.0.1",18765)); s.close()'
+  run_as_root rm -f "$state"
+  token="$(
+    {
+      if [ -n "$DOMAIN" ] && [ -n "$USERNAME" ] && [ -n "$PASSWORD" ] && run_as_root test -f "$SERVICE_FILE"; then
+        HTTPS_PORT="${HTTPS_PORT:-443}" print_sing_box_config
+      fi
+      if [ -n "$HY2_DOMAIN" ] && [ -n "$HY2_PASSWORD" ] && run_as_root test -f "$HY2_SERVICE_FILE"; then
+        HY2_PORT="${HY2_PORT:-443}" HY2_UP_MBPS="${HY2_UP_MBPS:-0}" HY2_DOWN_MBPS="${HY2_DOWN_MBPS:-0}" print_hysteria2_client_config
+      fi
+    } | run_as_root python3 "$helper" prepare "$state" --ttl "$LINK_TTL"
+  )"
+  run_as_root chown "$SERVICE_USER:$SERVICE_GROUP" "$state"
+  run_as_root install -m 0755 "$helper" /usr/local/bin/pixelcat-one-time-link.py
+  run_as_root systemd-run --quiet --collect --unit=pixelcat-once \
+    --property="User=$SERVICE_USER" --property="Group=$SERVICE_GROUP" \
+    --property="RuntimeMaxSec=$LINK_TTL" --property=NoNewPrivileges=yes \
+    --property=ProtectSystem=strict --property=ProtectHome=yes \
+    --property="ReadWritePaths=$DATA_DIR" \
+    --property="ExecStopPost=/usr/bin/rm -f $state" \
+    /usr/bin/env python3 /usr/local/bin/pixelcat-one-time-link.py serve "$state"
+  # Wait for binding without requesting (and consuming) the actual link.
+  if ! run_as_root python3 -c 'import socket,time
+for i in range(30):
+ try:
+  s=socket.create_connection(("127.0.0.1",18765),.2); s.close(); break
+ except OSError: time.sleep(.1)
+else: raise SystemExit("One-time service did not start")'; then
+    run_as_root systemctl stop pixelcat-once.service || true
+    return 1
+  fi
+  if ! run_as_root systemctl is-active --quiet pixelcat-once.service; then
+    error 'One-time delivery service failed to start.'
+    return 1
+  fi
+  run_as_root cp -p "$INSTALL_DIR/Caddyfile" "$backup"
+  run_as_root install -o root -g "$SERVICE_GROUP" -m 0640 "$staged" "$INSTALL_DIR/Caddyfile"
+  if ! run_as_root systemctl restart "$SERVICE_NAME"; then
+    run_as_root cp -p "$backup" "$INSTALL_DIR/Caddyfile"
+    run_as_root systemctl restart "$SERVICE_NAME" || true
+    run_as_root systemctl stop pixelcat-once.service || true
+    return 1
+  fi
+  run_as_root rm -f "$staged" "$backup"
+  case "$UI_LANG" in
+    ru) printf '\nОдноразовая ссылка (%s с). Первый GET расходует ссылку; повторите генерацию при ошибке. Это mixed JSON, не TUN/VPN и не Shadowrocket.\n' "$LINK_TTL" ;;
+    fa) printf '\nلینک یک‌بارمصرف (%s ثانیه). اولین GET لینک را مصرف می‌کند؛ در خطا دوباره بسازید. پیکربندی mixed است، نه TUN/VPN یا Shadowrocket.\n' "$LINK_TTL" ;;
+    *) printf '\n一次性领取链接（%s 秒有效）：首次 GET 即作废，下载中断需重新生成。\n这是现有 mixed 配置，不是手机 TUN/VPN 配置，也不是小火箭订阅。不要预先打开链接或生成公开二维码。\n' "$LINK_TTL" ;;
+  esac
+  printf 'https://%s:%s/pixelcat-once/%s\n' "$link_host" "${HTTPS_PORT:-443}" "$token"
+}
+
 if [ "$ACTION" = "menu" ]; then
   show_menu
+fi
+
+if [ "$ACTION" = "one-time-link" ]; then
+  generate_one_time_link
+  exit 0
 fi
 
 if [ "$ACTION" = "uninstall" ]; then

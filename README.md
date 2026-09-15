@@ -1,463 +1,175 @@
-<p align="center">
-  <img src="./pixel-cat.svg" alt="PixelCat" width="120" />
-</p>
+<p align="center"><img src="./pixel-cat.svg" alt="PixelCat" width="120" /></p>
 
 # PixelCat Proxy
 
 **中文** | [Русский](README.ru.md) | [فارسی](README.fa.md)
 
-PixelCat Proxy 是面向 Linux 服务器的三语一键部署脚本，支持中文、俄语和波斯语，用来部署和维护：
+面向 Linux 的 NaiveProxy / Hysteria2 安装维护脚本，提供三语言菜单、诊断工具和一次性 sing-box 配置领取链接。
 
-- **NaiveProxy**：使用 NaiveProxy 作者维护的 `github.com/klzgrad/forwardproxy` Caddy 插件，由 Caddy 提供 TLS、HTTP/2 CONNECT、Basic Auth、probe resistance 和伪装站点。
-- **Hysteria2**：使用官方 Hysteria2 二进制，支持 UDP 端口跳跃。
-- **节点维护工具**：BBR、IP 质量检测、流媒体解锁检测、网络质量/回程检测。
+## 功能与环境
 
-默认用途是合法合规的学习、研究、远程办公与公开信息访问。请遵守所在地法律法规以及学校、公司或服务商的网络使用政策。
+- NaiveProxy：Caddy + `klzgrad/forwardproxy@naive`，提供 TLS、HTTP/2 CONNECT、认证和伪装站点。
+- Hysteria2：官方服务端，支持 UDP 端口跳跃和复用同域名 Caddy 证书。
+- 维护：BBR、IP 质量、流媒体解锁、网络质量和回程检测。
+- 一次性链接：随机 HTTPS 地址，限时且最多领取一次。
 
-## 入口
+需要 Linux、Bash、systemd、root 或 sudo，支持 amd64 / arm64。推荐 Debian、Ubuntu、具备 systemd 的 RHEL 系 / Fedora。普通 Alpine/OpenRC 环境不能直接使用本脚本的服务管理。一次性链接额外需要 Python 3.7+、完整项目中的 `one_time_link.py` 和可用的 PixelCat Caddy HTTPS 服务。
 
-- 官网：[pixelcat.icu](https://pixelcat.icu)
-- YouTube：[@PixelCatICU](https://www.youtube.com/@PixelCatICU)
-- GitHub：[PixelCatICU](https://github.com/PixelCatICU)
-- X：[@PixelCatICU](https://x.com/PixelCatICU)
+域名 A/AAAA 记录应指向服务器，云安全组和系统防火墙需开放：
 
-## 架构
+| 用途 | 默认端口 |
+| --- | --- |
+| HTTP / 证书验证 | `80/tcp` |
+| NaiveProxy / HTTPS 领取 | `443/tcp` |
+| Hysteria2 | `443/udp` |
+| 可选 UDP 端口跳跃 | `20000-50000/udp` |
 
-| 组件 | 服务名 | 协议 | 默认端口 | 说明 |
-| --- | --- | --- | --- | --- |
-| NaiveProxy | `pixelcat-naiveproxy.service` | HTTPS/TCP | `443/tcp` | Caddy + `klzgrad/forwardproxy@naive` |
-| Hysteria2 | `pixelcat-hysteria2.service` | QUIC/UDP | `443/udp` | 官方 Hysteria2 server |
-| 端口跳跃 | `pixelcat-hysteria2-hop.service` | UDP DNAT | `20000-50000/udp` | nftables 优先，iptables 兜底 |
+TCP 和 UDP 可共用域名及端口号。领取后台只监听 `127.0.0.1:18765`，无需对公网开放该端口。
 
-NaiveProxy 的构建方式与官方 README 的 Caddy 示例一致：
-
-```bash
-xcaddy build \
-  --with github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@naive
-```
-
-也就是说：
-
-- 使用的是 `klzgrad/forwardproxy` 的 `naive` 分支。
-- 服务端不是独立 `naive` 二进制，而是带 NaiveProxy padding layer 的 Caddy 插件。
-
-## 系统要求
-
-- Linux + systemd。
-- Debian / Ubuntu / RHEL 系 / Fedora / Alpine 等常见发行版。
-- 支持 `amd64` 和 `arm64`。
-- 域名 `A/AAAA` 记录已解析到服务器。
-- 防火墙和云安全组放行：
-  - NaiveProxy：`80/tcp`、`443/tcp`
-  - Hysteria2：`443/udp`
-  - 端口跳跃：默认 `20000-50000/udp`
-
-脚本会自动安装基础依赖。预编译 Caddy 不可用时，会自动安装 Go 和 xcaddy 在本机编译。
-
-## 一键安装
-
-在服务器执行：
+## 快速开始
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/PixelCatICU/pixelcat-proxy/main/install.sh | bash
 ```
 
-入口脚本会下载源码到：
-
-```text
-/opt/pixelcat/pixelcat-naiveproxy
-```
-
-然后启动语言选择与安装菜单。
-
-如果已经把项目放到服务器，也可以直接运行：
+入口下载完整项目到 `/opt/pixelcat/pixelcat-naiveproxy`，保留已有 `.env*`，随后打开语言选择和安装菜单。
 
 ```bash
-cd /path/to/pixelcat-naiveproxy
-./deploy.sh
-```
-
-## 语言 / Languages
-
-交互运行时可选择语言，也可以通过 `--lang` 或 `PIXELCAT_LANG` 明确指定：
-
-```bash
-./deploy.sh --lang zh       # 中文
-./deploy.sh --lang ru       # Русский
-./deploy.sh --lang fa       # فارسی
-
-PIXELCAT_LANG=ru ./deploy.sh
-```
-
-一键入口同样支持语言参数：
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/PixelCatICU/pixelcat-proxy/main/install.sh | bash -s -- --lang ru
-curl -fsSL https://raw.githubusercontent.com/PixelCatICU/pixelcat-proxy/main/install.sh | bash -s -- --lang fa
-```
-
-Русский: используйте `--lang ru`. فارسی: از `--lang fa` استفاده کنید. 非交互模式未指定语言时默认使用中文。
-
-## 菜单
-
-```text
-1) 安装 / 更新 PixelCat NaiveProxy
-2) 安装 / 更新 PixelCat Hysteria2
-3) 卸载 PixelCat NaiveProxy
-4) 卸载 PixelCat Hysteria2
-5) 一键开启 BBR
-6) IP 质量检测           (xykt/IPQuality)
-7) 流媒体解锁检测         (lmc999/RegionRestrictionCheck)
-8) 网络质量 / 回程检测     (xykt/NetQuality)
-0) 退出
-```
-
-查看全部参数：
-
-```bash
+cd /opt/pixelcat/pixelcat-naiveproxy
+./deploy.sh --lang zh
 ./deploy.sh --help
 ```
 
-## 安装 NaiveProxy
-
-交互式安装：
+语言支持 `zh`、`ru`、`fa`，也可用 `PIXELCAT_LANG=ru ./deploy.sh`。入口传参示例：
 
 ```bash
-./deploy.sh
+curl -fsSL https://raw.githubusercontent.com/PixelCatICU/pixelcat-proxy/main/install.sh | bash -s -- --lang ru
 ```
 
-菜单选择 `1`，按提示填写：
+## 菜单
 
-- 代理域名，例如 `proxy.example.com`
-- 用户名
-- 密码
-- 伪装站点域名，例如 `www.example.com`，不要带 `https://`
-- Let's Encrypt 邮箱，可留空
-- HTTP 端口，默认 `80`
-- HTTPS 端口，默认 `443`
+| 选项 | 操作 |
+| --- | --- |
+| 1 / 2 | 安装或更新 NaiveProxy / Hysteria2 |
+| 3 / 4 | 卸载 NaiveProxy / Hysteria2 |
+| 5 | 开启 BBR |
+| 6 | IP 质量检测 |
+| 7 | 流媒体解锁检测 |
+| 8 | 网络质量 / 回程检测 |
+| 9 | 生成一次性 sing-box 配置领取链接 |
+| 0 | 退出 |
 
-非交互安装：
+## 安装与配置
+
+推荐交互输入密码，避免凭据进入 shell 历史或进程参数。
 
 ```bash
-./deploy.sh --install -y \
-  --domain proxy.example.com \
-  --username your_user \
-  --password change_this_strong_password \
-  --decoy-domain www.example.com \
-  --email admin@example.com
+./deploy.sh --install
+./deploy.sh --install-hysteria2
 ```
 
-生产环境更推荐交互式输入密码，因为 `--password` 可能被 shell 历史或进程列表记录。
+NaiveProxy 需要域名、用户名、密码和伪装网站域名；邮箱可选。伪装网站只填域名，例如 `www.example.com`，不能与代理域名相同。
 
-强制本地编译 Caddy：
+Hysteria2 优先沿用当前目录 NaiveProxy `.env` 的域名和密码，否则提示输入域名并生成密码。默认 UDP 443，跳跃范围 20000-50000，上下行限速为 0（不限速），伪装 URL 优先沿用 NaiveProxy，否则使用 https://www.bing.com。
 
 ```bash
+./deploy.sh --install-hysteria2 --hy2-hop-range off
 ./deploy.sh --install --build-from-source
-```
-
-只写入配置，不启动服务：
-
-```bash
 ./deploy.sh --install --skip-start
 ```
 
-### NaiveProxy 文件
+- `--hy2-hop-range off`：关闭跳跃；`--hy2-hop-iface` 可指定网卡。
+- `--hy2-port`、`--hy2-up-mbps`、`--hy2-down-mbps`、`--hy2-masquerade`：覆盖对应默认值。
+- `--build-from-source`：强制 Go + xcaddy 本地编译。默认预编译下载会验证 SHA-256 和 forward_proxy 模块，失败时回退编译。
+- `--skip-start`：生成配置但不启动服务，Hysteria2 安装同样支持。
 
-```text
-/usr/local/bin/pixelcat-naiveproxy-caddy
-/etc/pixelcat-naiveproxy/Caddyfile
-/var/lib/pixelcat-naiveproxy
-/etc/systemd/system/pixelcat-naiveproxy.service
-/opt/pixelcat/pixelcat-naiveproxy/.env
+证书优先使用 Caddy 同域名证书；没有时尝试签发。Hysteria2 ACME 回退要求 TCP 443 可用，已有 Caddy 无法提供证书时可能需要手动处理。端口跳跃优先 nftables，iptables 兜底。
+
+## 客户端使用
+
+安装结束会打印完整 sing-box JSON。将最外层大括号及全部内容保存为 `config.json`，再按客户端支持的方式导入本地配置。
+
+**当前入口是 mixed，监听 `127.0.0.1:2080`（HTTP/SOCKS），未包含手机全局 VPN 的 TUN/DNS 配置，也不是小火箭订阅格式。** 服务安装成功不代表客户端端到端连接已验证。
+
+配置含明文密码，请勿公开上传、截图或放进视频。
+
+## 一次性配置领取
+
+在包含 `.env` / `.env.hysteria2` 的服务器脚本目录选择菜单 9，或执行：
+
+```bash
+cd /opt/pixelcat/pixelcat-naiveproxy
+./deploy.sh --one-time-link
+./deploy.sh --one-time-link --link-ttl 300
 ```
 
-### NaiveProxy 命令
+输出示例：
+
+```text
+https://proxy.example.com:443/pixelcat-once/<随机密钥>
+```
+
+- 默认 600 秒有效，允许 30–3600 秒。
+- 首次匹配的 GET 请求立即消耗链接，即使下载中断也不会恢复。HEAD 不消耗；错误密钥不能领取。
+- 新链接撤销旧链接，不要多终端同时生成。不要预先打开链接；自动重试或订阅刷新会失败。
+- 领取后保存为本地配置。合并本地环境文件与服务文件均存在的节点，优先使用 NaiveProxy，仍输出上述 mixed JSON。
+- 取消当前链接：`sudo systemctl stop pixelcat-once.service`。
+
+### 服务行为与限制
+
+密钥为随机 256 位。准备文件权限为 0600，服务读入后删除，内容只留在进程内存；临时服务到期退出。后台不记录请求路径，响应禁止缓存；外部 CDN / 代理的日志和缓存策略需另外检查。
+
+脚本验证、备份并修改 Caddyfile，然后重启 Caddy，已有连接可能短暂中断。重启失败时尝试恢复文件和服务。自定义日志或不支持的路由布局会拒绝自动修改。重新安装或卸载 NaiveProxy 会重写 Caddyfile，必要时重新生成链接。
+
+一次性领取不能阻止他人抢先领取，也不能撤销已下载的凭据；凭据泄露仍需更换节点密码。
+
+## 维护、更新与卸载
 
 ```bash
 systemctl status pixelcat-naiveproxy --no-pager
+systemctl status pixelcat-hysteria2 --no-pager
+systemctl status pixelcat-hysteria2-hop --no-pager
 journalctl -u pixelcat-naiveproxy -f
+journalctl -u pixelcat-hysteria2 -f
 systemctl restart pixelcat-naiveproxy
-/usr/local/bin/pixelcat-naiveproxy-caddy list-modules | grep forward_proxy
+systemctl restart pixelcat-hysteria2
 ```
 
-### NaiveProxy 卸载
+| 数据 | 路径 |
+| --- | --- |
+| 节点环境文件 | 项目目录 `.env`、`.env.hysteria2` |
+| Caddy 配置 / 数据 | `/etc/pixelcat-naiveproxy/Caddyfile` / `/var/lib/pixelcat-naiveproxy` |
+| Hysteria2 配置 / 数据 | `/etc/pixelcat-hysteria2/config.yaml` / `/var/lib/pixelcat-hysteria2` |
+| 领取程序 | `/usr/local/bin/pixelcat-one-time-link.py` |
 
-移除 NaiveProxy 转发配置，保留 Caddy 服务、证书目录和 Hysteria2 数据：
+重新执行安装入口更新脚本，再选择对应安装菜单更新节点。
 
 ```bash
 ./deploy.sh --uninstall
-```
-
-同时删除当前项目目录下的 NaiveProxy `.env`：
-
-```bash
-./deploy.sh --uninstall --purge
-```
-
-说明：
-
-- `--uninstall` 会去掉 Caddyfile 里的 `forward_proxy` 配置，让 Caddy 只保留伪装站点和证书能力。
-- `/var/lib/pixelcat-naiveproxy` 默认保留，因为 Hysteria2 可能正在复用这里的证书。
-- `pixelcat-naiveproxy.service` 默认保留，这是证书和伪装站点的基础服务。
-
-免确认卸载：
-
-```bash
-./deploy.sh --uninstall -y
-```
-
-## 安装 Hysteria2
-
-交互式安装：
-
-```bash
-./deploy.sh
-```
-
-菜单选择 `2`，按提示填写：
-
-- Hysteria2 域名：如果当前目录已有 NaiveProxy `.env`，默认沿用 `DOMAIN`。
-- Hysteria2 密码：如果当前目录已有 NaiveProxy `.env`，默认沿用 `PASSWORD`；否则自动生成。
-- UDP 监听端口：默认 `443`。
-- 端口跳跃范围：默认 `20000-50000`，输入 `off` 关闭。
-- 上行/下行限速 Mbps：默认 `0`，表示不限速。
-- 伪装 URL：优先沿用 `https://DECOY_DOMAIN`，否则默认 `https://www.bing.com`。
-
-非交互安装：
-
-```bash
-./deploy.sh --install-hysteria2 -y \
-  --hy2-domain proxy.example.com \
-  --hy2-port 443 \
-  --hy2-hop-range 20000-50000 \
-  --hy2-up-mbps 0 \
-  --hy2-down-mbps 0 \
-  --hy2-masquerade https://www.bing.com
-```
-
-只安装 Hysteria2，并复用现有 NaiveProxy `.env`：
-
-```bash
-./deploy.sh --install-hysteria2 -y
-```
-
-关闭端口跳跃：
-
-```bash
-./deploy.sh --install-hysteria2 -y --hy2-hop-range off
-```
-
-只写入配置，不启动服务：
-
-```bash
-./deploy.sh --install-hysteria2 --skip-start
-```
-
-### Hysteria2 证书
-
-安装 Hysteria2 时，脚本会先确保 `pixelcat-naiveproxy.service` 存在：
-
-- 如果 `/var/lib/pixelcat-naiveproxy` 下已经有同域名证书，Hysteria2 会直接复用。
-- 证书查找会遍历 Caddy 的证书存储，不再只依赖 Let's Encrypt 单一路径。
-- 如果没有可复用证书，脚本会先尝试让 PixelCat Caddy 为该域名签出证书。
-- 如果 Caddy 原本没有运行且签证书超时，脚本会停止临时 Caddy 服务，再让 Hysteria2 自己申请 ACME 证书，避免两边抢占 `443/tcp`。
-- 如果 Caddy 原本已经在运行但仍没有该域名证书，脚本会停止安装并提示手动处理，避免打断现有 NaiveProxy 服务。
-- Hysteria2 自申请 ACME 时需要 `443/tcp` 可用于 TLS-ALPN-01 校验。
-- 先安装 Hysteria2、后安装 NaiveProxy 也可以；同域名场景下后续会优先复用 `/var/lib/pixelcat-naiveproxy` 里的 Caddy 证书。
-
-### Hysteria2 文件
-
-```text
-/usr/local/bin/pixelcat-hysteria2
-/etc/pixelcat-hysteria2/config.yaml
-/etc/pixelcat-hysteria2/hop-up.sh
-/etc/pixelcat-hysteria2/hop-down.sh
-/var/lib/pixelcat-hysteria2
-/etc/systemd/system/pixelcat-hysteria2.service
-/etc/systemd/system/pixelcat-hysteria2-hop.service
-/etc/sysctl.d/99-pixelcat-hysteria2.conf
-/opt/pixelcat/pixelcat-naiveproxy/.env.hysteria2
-```
-
-### Hysteria2 命令
-
-```bash
-systemctl status pixelcat-hysteria2 --no-pager
-systemctl status pixelcat-hysteria2-hop --no-pager
-journalctl -u pixelcat-hysteria2 -f
-systemctl restart pixelcat-hysteria2
-nft list table inet pixelcat-hy 2>/dev/null || iptables -t nat -L PREROUTING -n
-```
-
-### Hysteria2 卸载
-
-停止并删除 Hysteria2 服务，保留配置和证书数据：
-
-```bash
 ./deploy.sh --uninstall-hysteria2
 ```
 
-彻底清理 Hysteria2 配置、证书数据和 `.env.hysteria2`：
+NaiveProxy 卸载移除转发功能，保留 Caddy、证书和伪装服务；`--purge` 额外删除当前目录 `.env`。Hysteria2 默认保留配置和证书，`--purge` 会清理配置、证书数据与 `.env.hysteria2`。一次性服务请单独停止。
 
-```bash
-./deploy.sh --uninstall-hysteria2 --purge
-```
-
-免确认卸载：
-
-```bash
-./deploy.sh --uninstall-hysteria2 -y
-```
-
-## 客户端配置
-
-部署完成后，脚本会自动打印 sing-box 客户端配置。
-
-NaiveProxy 示例：
-
-```json
-{
-  "outbounds": [
-    {
-      "type": "naive",
-      "tag": "naive-out",
-      "server": "proxy.example.com",
-      "server_port": 443,
-      "username": "your_user",
-      "password": "change_this_strong_password",
-      "tls": {
-        "enabled": true,
-        "server_name": "proxy.example.com"
-      }
-    }
-  ],
-  "route": {
-    "final": "naive-out",
-    "auto_detect_interface": true
-  }
-}
-```
-
-Hysteria2 示例：
-
-```json
-{
-  "outbounds": [
-    {
-      "type": "hysteria2",
-      "tag": "hysteria-out",
-      "server": "proxy.example.com",
-      "server_port": 443,
-      "server_ports": ["20000:50000"],
-      "password": "<生成的密码>",
-      "tls": {
-        "enabled": true,
-        "server_name": "proxy.example.com"
-      },
-      "up_mbps": 0,
-      "down_mbps": 0
-    }
-  ]
-}
-```
-
-客户端配置包含明文密码，不要公开展示或截图。
-
-## 诊断工具
+## 诊断与开发
 
 ```bash
 ./deploy.sh --bbr
 ./deploy.sh --ip-quality
 ./deploy.sh --unlock-check
 ./deploy.sh --net-quality
+bash tests/i18n-smoke.sh
+python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
-来源：
+检测来源：[IPQuality](https://github.com/xykt/IPQuality)、[RegionRestrictionCheck](https://github.com/lmc999/RegionRestrictionCheck)、[NetQuality](https://github.com/xykt/NetQuality)。执行前显示 URL 和 SHA-256；交互模式确认后运行，`-y` 或非交互模式自动继续。
 
-- `--ip-quality`：[xykt/IPQuality](https://github.com/xykt/IPQuality)
-- `--unlock-check`：[lmc999/RegionRestrictionCheck](https://github.com/lmc999/RegionRestrictionCheck)
-- `--net-quality`：[xykt/NetQuality](https://github.com/xykt/NetQuality)
+测试覆盖并发领取、错误密钥、过期、HEAD/GET、配置合并和 Caddy 文本修改，不替代 Linux systemd、证书及客户端联网验证。
 
-说明：
+构建默认 Caddy `v2.11.4`、xcaddy `v0.4.5`、forwardproxy `naive`。可通过 `CADDY_VERSION`、`XCADDY_VERSION`、`CADDY_FORWARDPROXY_REF` 覆盖。发布 Release 或手动运行 Actions 的 `Build PixelCat Caddy` 生成 amd64/arm64 产物和校验文件。
 
-- BBR 会写入 `/etc/sysctl.d/99-pixelcat-bbr.conf`。
-- 诊断脚本会尽量自动安装 `jq`、`dig`、`mtr`、`iperf3`、`bc`、`imagemagick`、`nexttrace` 等依赖。
-- 执行第三方远程脚本前会显示来源 URL 和本次下载 SHA256；交互模式需要确认，`-y` 或非交互模式会自动继续。
-- 部分检测项需要 root 权限和完整网络连通性。
-- 第三方脚本可能在生成报告后仍返回非 0 状态码，脚本会保留提示。
+## 项目链接
 
-## 配置变量
+[官网](https://pixelcat.icu) · [YouTube](https://www.youtube.com/@PixelCatICU) · [GitHub](https://github.com/PixelCatICU) · [X](https://x.com/PixelCatICU)
 
-NaiveProxy：
-
-| 变量 | 必填 | 默认 | 说明 |
-| --- | --- | --- | --- |
-| `DOMAIN` | 是 | - | 代理域名 |
-| `USERNAME` | 是 | - | Basic Auth 用户名 |
-| `PASSWORD` | 是 | - | Basic Auth 密码 |
-| `DECOY_DOMAIN` | 是 | - | 伪装站点域名，不带协议 |
-| `EMAIL` | 否 | 空 | Let's Encrypt 邮箱 |
-| `HTTP_PORT` | 否 | `80` | HTTP 端口 |
-| `HTTPS_PORT` | 否 | `443` | HTTPS 代理端口 |
-
-Hysteria2：
-
-| 变量 | 必填 | 默认 | 说明 |
-| --- | --- | --- | --- |
-| `HY2_DOMAIN` | 是 | 优先沿用 `.env` 的 `DOMAIN` | TLS SNI 域名 |
-| `HY2_PASSWORD` | 是 | 优先沿用 `.env` 的 `PASSWORD`，否则自动生成 | 客户端密码 |
-| `HY2_PORT` | 否 | `443` | UDP 监听端口 |
-| `HY2_HOP_RANGE` | 否 | `20000-50000` | 端口跳跃范围，`off` 关闭 |
-| `HY2_HOP_IFACE` | 否 | 自动检测默认路由网卡 | DNAT 使用的网卡 |
-| `HY2_UP_MBPS` | 否 | `0` | 上行限速 Mbps |
-| `HY2_DOWN_MBPS` | 否 | `0` | 下行限速 Mbps |
-| `HY2_MASQUERADE_URL` | 否 | 优先沿用 `https://DECOY_DOMAIN`，否则 `https://www.bing.com` | 伪装 URL |
-
-## 发布预编译 Caddy
-
-GitHub Actions 会构建：
-
-```text
-pixelcat-naiveproxy-caddy-linux-amd64.tar.gz
-pixelcat-naiveproxy-caddy-linux-arm64.tar.gz
-```
-
-每个产物会同时上传 `.sha256`。部署脚本会强制校验：
-
-- 校验和文件下载失败：拒绝使用，回退本地编译。
-- 校验和不匹配：拒绝使用，回退本地编译。
-- 二进制不包含 `http.handlers.forward_proxy`：拒绝使用，回退本地编译。
-- 缺少 `sha256sum`：回退本地编译。
-
-构建版本默认使用：
-
-```text
-Go: latest stable from go.dev
-Caddy: v2.11.4
-xcaddy: v0.4.5
-forwardproxy: naive
-```
-
-本地编译时也会使用 `CADDY_VERSION`、`XCADDY_VERSION`、`CADDY_FORWARDPROXY_REF` 这三个变量，必要时可在运行脚本前覆盖。
-
-发布方式：
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-然后在 GitHub Release 页面发布这个 tag，也可以在 GitHub Actions 页面手动运行 `Build PixelCat Caddy`。
-
-## 注意事项
-
-- 首次申请证书时，公网必须能访问对应域名和端口。
-- `DECOY_DOMAIN` 只填域名，例如 `www.example.com`。
-- 复杂网站可能因为 Cookie、CSP、WebSocket 或静态资源跨域限制导致反代显示不完整。
-- `/var/lib/pixelcat-naiveproxy` 和 `/var/lib/pixelcat-hysteria2` 保存证书和 ACME 数据，不要随意删除。
-- 如果域名套了 CDN，请确认 CDN 支持相关代理流量；不确定时先使用仅 DNS 解析。
-- OpenVZ 等不支持 nftables/iptables NAT 的环境，建议关闭 Hysteria2 端口跳跃。
-
-## 开源协议
-
-本项目采用 [GNU General Public License v3.0](./LICENSE) 开源协议。
+许可证：[GNU GPL v3.0](LICENSE)。
