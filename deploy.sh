@@ -1291,6 +1291,7 @@ write_caddyfile() {
     # Stable Caddy lacks the per-CONNECT timeout override used by newer plugins.
     # Keep quiet Naive tunnels alive instead of the new 1-minute body idle limit.
     echo "	servers :$HTTPS_PORT {"
+    echo "		protocols h1 h2"
     echo "		timeouts {"
     echo "			read_body_idle 24h"
     echo "		}"
