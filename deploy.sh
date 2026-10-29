@@ -30,8 +30,8 @@ GO_BIN=""
 XCADDY_BIN="/usr/local/bin/xcaddy"
 RELEASE_BASE_URL="${RELEASE_BASE_URL:-https://github.com/PixelCatICU/pixelcat-proxy/releases/latest/download}"
 BUILD_FROM_SOURCE="false"
-CADDY_VERSION="${CADDY_VERSION:-v2.11.4}"
-XCADDY_VERSION="${XCADDY_VERSION:-v0.4.5}"
+CADDY_VERSION="${CADDY_VERSION:-v2.11.7}"
+XCADDY_VERSION="${XCADDY_VERSION:-v0.4.7}"
 CADDY_FORWARDPROXY_REF="${CADDY_FORWARDPROXY_REF:-naive}"
 
 HY2_DOMAIN="${HY2_DOMAIN:-}"
@@ -51,7 +51,8 @@ HY2_DATA_DIR="/var/lib/pixelcat-hysteria2"
 HY2_BIN="/usr/local/bin/pixelcat-hysteria2"
 HY2_SERVICE_FILE="/etc/systemd/system/${HY2_SERVICE_NAME}.service"
 HY2_HOP_SERVICE_FILE="/etc/systemd/system/${HY2_HOP_SERVICE_NAME}.service"
-HY2_RELEASE_BASE_URL="${HY2_RELEASE_BASE_URL:-https://github.com/apernet/hysteria/releases/latest/download}"
+HY2_VERSION="${HY2_VERSION:-app/v2.13.0}"
+HY2_RELEASE_BASE_URL="${HY2_RELEASE_BASE_URL:-https://github.com/HyNetworks/hysteria/releases/download/$HY2_VERSION}"
 HY2_DEFAULT_HOP_RANGE="20000-50000"
 HY2_DEFAULT_MASQUERADE_URL="https://www.bing.com"
 
@@ -716,6 +717,13 @@ caddy_escape() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
+caddy_bin_matches_version() {
+  local bin="$1" version
+  [ -x "$bin" ] || return 1
+  version="$("$bin" version 2>/dev/null | awk '{print $1}')" || return 1
+  [ "$version" = "$CADDY_VERSION" ]
+}
+
 caddy_bin_has_forwardproxy() {
   local bin="$1"
   [ -x "$bin" ] || return 1
@@ -1026,6 +1034,12 @@ download_prebuilt_caddy() {
     return 1
   fi
 
+  if ! caddy_bin_matches_version "$tmp_bin"; then
+    warn "预编译 PixelCat Caddy 版本与 $CADDY_VERSION 不一致,改用本地编译。"
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
   run_as_root install -m 0755 "$tmp_bin" "$CADDY_BIN"
   rm -rf "$tmp_dir"
   success "已安装预编译 PixelCat Caddy:$CADDY_BIN"
@@ -1040,7 +1054,7 @@ go_version_ok() {
   minor="${version#*.}"
   minor="${minor%%.*}"
   [ -n "$major" ] && [ -n "$minor" ] || return 1
-  [ "$major" -gt 1 ] || { [ "$major" -eq 1 ] && [ "$minor" -ge 22 ]; }
+  [ "$major" -gt 1 ] || { [ "$major" -eq 1 ] && [ "$minor" -ge 26 ]; }
 }
 
 select_or_install_go() {
@@ -1085,7 +1099,8 @@ select_or_install_go() {
 }
 
 install_xcaddy() {
-  if [ -x "$XCADDY_BIN" ]; then
+  if [ -x "$XCADDY_BIN" ] &&
+    [ "$("$XCADDY_BIN" version 2>/dev/null | awk '{print $1}')" = "$XCADDY_VERSION" ]; then
     return
   fi
 
@@ -1150,7 +1165,8 @@ ensure_caddy_runtime() {
   install_base_packages
   ensure_service_user
 
-  if [ -x "$CADDY_BIN" ] && caddy_service_exists && caddy_bin_has_forwardproxy "$CADDY_BIN"; then
+  if [ "$BUILD_FROM_SOURCE" != "true" ] && caddy_bin_matches_version "$CADDY_BIN" &&
+    caddy_service_exists && caddy_bin_has_forwardproxy "$CADDY_BIN"; then
     info "检测到 PixelCat NaiveProxy 已存在,将复用现有服务和证书目录。"
   else
     if ! download_prebuilt_caddy; then

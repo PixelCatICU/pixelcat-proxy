@@ -159,7 +159,9 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 
 Тесты проверяют конкурентность, неверные ключи, срок, HEAD/GET, объединение JSON и изменение текста Caddy. Они не заменяют проверку systemd, сертификатов и клиентской сети на Linux.
 
-Сборка: Caddy `v2.11.4`, xcaddy `v0.4.5`, forwardproxy `naive`; переменные `CADDY_VERSION`, `XCADDY_VERSION`, `CADDY_FORWARDPROXY_REF`. Release или ручной Actions `Build PixelCat Caddy` создаёт amd64/arm64 архивы и контрольные суммы.
+Сборка: Caddy `v2.11.7`, xcaddy `v0.4.7`, forwardproxy `naive`; переменные `CADDY_VERSION`, `XCADDY_VERSION`, `CADDY_FORWARDPROXY_REF`. Release или ручной Actions `Build PixelCat Caddy` создаёт amd64/arm64 архивы и контрольные суммы.
+
+Hysteria2 по умолчанию закреплён на `app/v2.13.0`; доступны `HY2_VERSION` и `HY2_RELEASE_BASE_URL`. CI использует Go `1.27.3`; локальная сборка требует Go 1.26 или новее и обновляет старый инструментарий. При повторной установке Caddy и xcaddy обновляются при несовпадении версий; устаревший готовый Caddy заменяется сборкой из исходников. `--build-from-source` принудительно пересобирает Caddy.
 
 ## Ссылки
 

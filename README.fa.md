@@ -159,7 +159,9 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 
 تست‌ها هم‌زمانی، کلید اشتباه، انقضا، HEAD/GET، ادغام JSON و تغییر متن Caddy را بررسی می‌کنند؛ جای آزمایش systemd، گواهی و اتصال واقعی در لینوکس را نمی‌گیرند.
 
-ساخت پیش‌فرض: Caddy `v2.11.4`، xcaddy `v0.4.5` و forwardproxy `naive`. متغیرها: `CADDY_VERSION`، `XCADDY_VERSION`، `CADDY_FORWARDPROXY_REF`. Release یا Actions دستی `Build PixelCat Caddy` آرشیو amd64/arm64 و فایل صحت‌سنجی می‌سازد.
+ساخت پیش‌فرض: Caddy `v2.11.7`، xcaddy `v0.4.7` و forwardproxy `naive`. متغیرها: `CADDY_VERSION`، `XCADDY_VERSION`، `CADDY_FORWARDPROXY_REF`. Release یا Actions دستی `Build PixelCat Caddy` آرشیو amd64/arm64 و فایل صحت‌سنجی می‌سازد.
+
+نسخهٔ پیش‌فرض Hysteria2 برابر `app/v2.13.0` است و با `HY2_VERSION` یا `HY2_RELEASE_BASE_URL` تغییر می‌کند. ساخت CI از Go `1.27.3` استفاده می‌کند؛ ساخت محلی حداقل Go 1.26 می‌خواهد و ابزار قدیمی را به‌روز می‌کند. نصب مجدد، Caddy و xcaddy ناسازگار با نسخهٔ انتخابی را به‌روز می‌کند؛ بستهٔ آمادهٔ قدیمی Caddy باعث ساخت از سورس می‌شود. گزینهٔ `--build-from-source` ساخت مجدد را اجباری می‌کند.
 
 ## پیوندها
 
