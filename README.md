@@ -70,6 +70,8 @@ curl -fsSL https://raw.githubusercontent.com/PixelCatICU/pixelcat-proxy/main/ins
 
 NaiveProxy 需要域名、用户名、密码和伪装网站域名；邮箱可选。伪装网站只填域名，例如 `www.example.com`，不能与代理域名相同。
 
+HTTP 访问（包括直接访问服务器 IP）会以 308 跳转到配置的代理域名 HTTPS 地址，保留路径和查询参数；非默认 HTTPS 端口会写入跳转地址。直接通过 IP 访问 HTTPS 仍需要匹配的证书。已有部署需下载新版脚本后重新运行 `./deploy.sh --install` 才会应用；重新安装会重写 Caddyfile 并重启服务。
+
 Hysteria2 优先沿用当前目录 NaiveProxy `.env` 的域名和密码，否则提示输入域名并生成密码。默认 UDP 443，跳跃范围 20000-50000，上下行限速为 0（不限速），伪装 URL 优先沿用 NaiveProxy，否则使用 https://www.bing.com。
 
 ```bash

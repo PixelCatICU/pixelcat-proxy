@@ -1245,9 +1245,13 @@ ensure_caddy_for_certificates() {
 }
 
 write_caddyfile() {
-  local enable_proxy="${1:-true}" caddy_user caddy_pass tmp
+  local enable_proxy="${1:-true}" caddy_user caddy_pass tmp https_authority
   caddy_user="$(caddy_escape "$USERNAME")"
   caddy_pass="$(caddy_escape "$PASSWORD")"
+  https_authority="$DOMAIN"
+  if [ "$HTTPS_PORT" != "443" ]; then
+    https_authority="$DOMAIN:$HTTPS_PORT"
+  fi
 
   run_as_root mkdir -p "$INSTALL_DIR" "$DATA_DIR"
   run_as_root chown root:"$SERVICE_GROUP" "$INSTALL_DIR"
@@ -1259,6 +1263,9 @@ write_caddyfile() {
   {
     echo "{"
     echo "	admin off"
+    # Replace Host-based automatic redirects; IP requests have no TLS certificate.
+    # Certificate automation (including HTTP-01 challenges) remains enabled.
+    echo "	auto_https disable_redirects"
     echo "	order forward_proxy before reverse_proxy"
     echo "	http_port $HTTP_PORT"
     echo "	https_port $HTTPS_PORT"
@@ -1268,6 +1275,10 @@ write_caddyfile() {
     if [ -n "$EMAIL" ]; then
       echo "	email $EMAIL"
     fi
+    echo "}"
+    echo
+    echo "http://:$HTTP_PORT {"
+    echo "	redir https://$https_authority{uri} 308"
     echo "}"
     echo
     echo ":$HTTPS_PORT, $DOMAIN {"
