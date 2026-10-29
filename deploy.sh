@@ -32,7 +32,7 @@ RELEASE_BASE_URL="${RELEASE_BASE_URL:-https://github.com/PixelCatICU/pixelcat-pr
 BUILD_FROM_SOURCE="false"
 CADDY_VERSION="${CADDY_VERSION:-v2.11.7}"
 XCADDY_VERSION="${XCADDY_VERSION:-v0.4.7}"
-CADDY_FORWARDPROXY_REF="${CADDY_FORWARDPROXY_REF:-naive}"
+CADDY_FORWARDPROXY_REF="${CADDY_FORWARDPROXY_REF:-c096d6a00cb28e019cc1995b04bdc6a9311d8024}"
 
 HY2_DOMAIN="${HY2_DOMAIN:-}"
 HY2_PASSWORD="${HY2_PASSWORD:-}"
@@ -1287,6 +1287,13 @@ write_caddyfile() {
     echo "	https_port $HTTPS_PORT"
     echo "	servers {"
     echo "		protocols h1 h2"
+    echo "	}"
+    # Stable Caddy lacks the per-CONNECT timeout override used by newer plugins.
+    # Keep quiet Naive tunnels alive instead of the new 1-minute body idle limit.
+    echo "	servers :$HTTPS_PORT {"
+    echo "		timeouts {"
+    echo "			read_body_idle 24h"
+    echo "		}"
     echo "	}"
     if [ -n "$EMAIL" ]; then
       echo "	email $EMAIL"

@@ -21,7 +21,7 @@ jobs:
     env:
       CADDY_VERSION: v2.11.7
       XCADDY_VERSION: v0.4.7
-      CADDY_FORWARDPROXY_REF: naive
+      CADDY_FORWARDPROXY_REF: c096d6a00cb28e019cc1995b04bdc6a9311d8024
     strategy:
       fail-fast: false
       matrix:

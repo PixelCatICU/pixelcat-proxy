@@ -77,6 +77,9 @@ class HttpRedirectTests(unittest.TestCase):
                                          capture_output=True, text=True)
                 data = json.loads(adapted.stdout)
                 servers = data['apps']['http']['servers']
+                tls_servers = [v for v in servers.values() if ':' + str(https_port) in v['listen']]
+                self.assertEqual(len(tls_servers), 1)
+                self.assertEqual(tls_servers[0]['read_idle_timeout'], 24 * 60 * 60 * 10**9)
                 http_servers = {k: v for k, v in servers.items() if ':' + str(port) in v['listen']}
                 self.assertEqual(len(http_servers), 1)
                 # Run the adapted HTTP server only: no ACME or external network.

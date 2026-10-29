@@ -168,7 +168,9 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 
 测试覆盖并发领取、错误密钥、过期、HEAD/GET、配置合并和 Caddy 文本修改，不替代 Linux systemd、证书及客户端联网验证。
 
-构建默认 Caddy `v2.11.7`、xcaddy `v0.4.7`、forwardproxy `naive`。可通过 `CADDY_VERSION`、`XCADDY_VERSION`、`CADDY_FORWARDPROXY_REF` 覆盖。发布 Release 或手动运行 Actions 的 `Build PixelCat Caddy` 生成 amd64/arm64 产物和校验文件。
+构建默认 Caddy `v2.11.7`、xcaddy `v0.4.7`、forwardproxy `c096d6a00cb28e019cc1995b04bdc6a9311d8024`。可通过 `CADDY_VERSION`、`XCADDY_VERSION`、`CADDY_FORWARDPROXY_REF` 覆盖。发布 Release 或手动运行 Actions 的 `Build PixelCat Caddy` 生成 amd64/arm64 产物和校验文件。
+
+forwardproxy 固定到与 Caddy 稳定版兼容的提交；当前 `naive` 分支依赖稳定版尚未提供的接口。HTTPS 请求体空闲超时设为 24 小时，避免安静的 CONNECT 隧道被新版默认的一分钟超时打断。
 
 Hysteria2 默认固定为 `app/v2.13.0`，可通过 `HY2_VERSION` 或 `HY2_RELEASE_BASE_URL` 覆盖。构建流程使用 Go `1.27.3`，本地源码编译至少需要 Go 1.26；旧工具链会自动更新。重新安装时会更新版本不匹配的 Caddy 和 xcaddy；预编译 Caddy 若版本不符则回退源码编译。`--build-from-source` 可强制重新编译。
 
